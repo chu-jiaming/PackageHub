@@ -1,37 +1,64 @@
 # PackageHub
 
-PackageHub is a Flutter app for organizing pickup credentials and quickly opening
-the corresponding identity-provider pages.
+PackageHub 是一个基于 Flutter 构建的取件凭证管理应用，帮助用户从取件图片中提取信息、整理多个包裹，并快速打开对应的身份验证页面。
 
-## Included features
+## 项目特点
 
-- Import pickup information from images with OCR and review the parsed fields.
-- Batch review imported items and detect possible duplicate tracking numbers.
-- Store, edit, group, and search pickup credentials locally.
-- Resolve pickup zones on the station map using station-specific rules.
-- Launch supported identity-provider pages directly from a credential.
+- **图片导入与 OCR**：识别单号、站点、取件码等信息，并提供人工复核流程。
+- **批量处理**：一次导入多张图片，集中审核和修正识别结果。
+- **重复检测**：标准化物流单号，避免重复保存同一个包裹。
+- **本地凭证管理**：使用 SQLite 保存数据，支持新增、编辑、删除、搜索和分组查看。
+- **站点地图**：通过站点规则解析取件区域，并在地图上展示取件位置。
+- **身份服务快捷入口**：根据凭证关联的身份服务，直接跳转到对应页面。
+- **跨平台 UI**：使用 Flutter 自适应布局，面向 iOS、Android 等平台。
 
-## Development
+## 技术栈
+
+- Flutter / Dart
+- SQLite（`sqflite`）
+- 图片选择（`image_picker`）
+- 本地数据访问与仓储模式
+- 单元测试、组件测试和页面测试
+
+## 项目结构
+
+```text
+lib/
+├── core/                 # OCR、解析、数据库、仓储、去重和外部跳转
+├── features/             # 首页、凭证、导入和身份服务相关页面
+├── map/                  # 站点地图和取件区域规则
+├── models/               # 领域模型与导入草稿
+└── ui/                   # 跨平台 UI 辅助组件
+test/                     # 单元测试、组件测试和页面测试
+assets/                   # 应用图标等静态资源
+scripts/                  # 构建脚本
+```
+
+## 开始开发
+
+请先安装 Flutter SDK，并确保 Flutter 与 Dart 版本满足 `pubspec.yaml` 中的约束。
 
 ```bash
 flutter pub get
+flutter run
+```
+
+运行测试：
+
+```bash
 flutter test
 ```
 
-The repository intentionally excludes local secrets, Flutter build output, and
-release packages. Keep credentials in local `.env` files or platform keystores;
-use `.env.example` for values that are safe to document.
+构建 iOS 发布包：
 
-## Getting Started
+```bash
+./scripts/build_ipa.sh
+```
 
-This project is a starting point for a Flutter application.
+## 数据与安全
 
-A few resources to get you started if this is your first Flutter project:
+应用数据默认保存在设备本地。仓库不会跟踪本地环境变量、平台签名密钥、构建目录和发布包；请勿将真实账号、密码或签名文件提交到 Git。
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## 许可
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+当前项目尚未声明开源许可证，未经作者许可请勿将其用于商业分发。
