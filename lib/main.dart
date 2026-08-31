@@ -1,18 +1,41 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:packagehub/core/ocr/ocr_service.dart';
-import 'package:packagehub/core/parser/pickup_parser.dart';
+import 'package:packagehub/core/database/packagehub_database.dart';
+import 'package:packagehub/core/duplicate/pickup_duplicate_detector.dart';
+import 'package:packagehub/core/repository/pickup_credential_repository.dart';
+import 'package:packagehub/features/credential/pickup_credential_card.dart';
+import 'package:packagehub/features/credential/pickup_credential_detail_page.dart';
+import 'package:packagehub/features/home/credential_grouping.dart';
+import 'package:packagehub/features/import/batch_import_page.dart';
+import 'package:packagehub/features/import/duplicate_review_page.dart';
+import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
+import 'package:packagehub/ui/adaptive.dart';
+import 'package:packagehub/core/launcher/identity_launcher.dart';
+import 'package:packagehub/features/identity/identity_hub_page.dart';
+import 'package:packagehub/map/station_map_page.dart';
+import 'package:flutter/cupertino.dart';
 
 void main() {
-  runApp(const PackageHubApp());
+  final database = PackageHubDatabase.instance;
+  final repository = PickupCredentialRepository(database);
+
+  runApp(PackageHubApp(repository: repository));
+}
+
+typedef ImagePathPicker = Future<List<String>> Function();
+typedef ImportPageBuilder = Widget Function(List<String> imagePaths);
+
+Future<List<String>> pickGalleryImagePaths() async {
+  final images = await ImagePicker().pickMultiImage(limit: kMaxBatchImageCount);
+  return normalizeBatchImagePaths(images.map((image) => image.path));
 }
 
 class PackageHubApp extends StatelessWidget {
-  const PackageHubApp({super.key});
+  final PickupCredentialRepositoryApi repository;
+
+  const PackageHubApp({super.key, required this.repository});
 
   @override
   Widget build(BuildContext context) {
@@ -25,483 +48,914 @@ class PackageHubApp extends StatelessWidget {
           seedColor: const Color(0xFF2563EB),
           brightness: Brightness.light,
         ),
-        scaffoldBackgroundColor: const Color(0xFFF7F8FA),
+        scaffoldBackgroundColor: const Color(0xFFF2F2F7),
+        splashFactory: InkSparkle.splashFactory,
       ),
-      home: const HomePage(),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF0A84FF),
+          brightness: Brightness.dark,
+        ),
+        scaffoldBackgroundColor: const Color(0xFF000000),
+      ),
+      themeMode: ThemeMode.system,
+      home: PackageHubShell(repository: repository),
     );
   }
 }
 
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+class PackageHubShell extends StatefulWidget {
+  final PickupCredentialRepositoryApi repository;
+  final IdentityLauncherApi? identityLauncher;
 
-  Future<void> _pickScreenshot(BuildContext context) async {
-    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+  const PackageHubShell({
+    super.key,
+    required this.repository,
+    this.identityLauncher,
+  });
 
-    if (image == null) {
-      return;
+  @override
+  State<PackageHubShell> createState() => _PackageHubShellState();
+}
+
+class _PackageHubShellState extends State<PackageHubShell> {
+  int _index = 0;
+  final _homeKey = GlobalKey<_HomePageState>();
+  final _mapKey = GlobalKey<StationMapPageState>();
+
+  void _selectTab(int index) {
+    setState(() => _index = index);
+    if (index == 0) {
+      _homeKey.currentState?._loadCredentials();
+    } else if (index == 1) {
+      _mapKey.currentState?.load();
     }
+  }
 
-    if (!context.mounted) {
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => ImportPreviewPage(imagePath: image.path),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _index,
+        children: [
+          HomePage(key: _homeKey, repository: widget.repository),
+          StationMapPage(key: _mapKey, repository: widget.repository),
+          IdentityHubPage(
+            launcher: widget.identityLauncher ?? IdentityLauncher(),
+          ),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: _selectTab,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            label: '取件',
+          ),
+          NavigationDestination(icon: Icon(CupertinoIcons.map), label: '地图'),
+          NavigationDestination(
+            icon: Icon(Icons.qr_code_2_outlined),
+            label: '身份码',
+          ),
+        ],
       ),
     );
+  }
+}
+
+class HomePage extends StatefulWidget {
+  final PickupCredentialRepositoryApi repository;
+  final ImagePathPicker? imagePathPicker;
+  final ImportPageBuilder? importPageBuilder;
+
+  const HomePage({
+    super.key,
+    required this.repository,
+    this.imagePathPicker,
+    this.importPageBuilder,
+  });
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  List<PickupCredential> _credentials = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  bool _isSaving = false;
+  final Set<int> _updatingCredentialIds = {};
+  String? _saveErrorMessage;
+  List<PickupCredentialDraft>? _draftsWaitingForRetry;
+  late final Future<void> _loadingFuture;
+  bool _isSelectionMode = false;
+  final Set<int> _selectedIds = {};
+  bool _isBatchOperating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadingFuture = _loadCredentials();
+  }
+
+  /// Expose loading future for testing.
+  Future<void> get loadingFuture => _loadingFuture;
+
+  Future<void> _loadCredentials() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final credentials = await widget.repository.getAll();
+      if (mounted) {
+        setState(() {
+          _credentials = credentials;
+          _selectedIds.retainAll(_credentialIds);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = '无法加载取件凭证';
+        });
+      }
+    }
+  }
+
+  Future<void> _openCredentialDetail(PickupCredential credential) async {
+    if (_isSelectionMode) {
+      _toggleSelection(credential);
+      return;
+    }
+
+    final changed = await Navigator.of(context).push<bool>(
+      adaptiveRoute(
+        context,
+        (context) => PickupCredentialDetailPage(
+          credential: credential,
+          repository: widget.repository,
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (changed == true) {
+      await _loadCredentials();
+    }
+  }
+
+  Future<void> _confirmDeleteCredential(PickupCredential credential) async {
+    final id = credential.id;
+    if (id == null) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('无法删除取件凭证')));
+      return;
+    }
+
+    final confirmed = await showAdaptiveDeleteDialog(
+      context,
+      title: '删除取件凭证？',
+      content: '删除后无法恢复。',
+      cancelKey: const Key('cancelDeleteCredentialButton'),
+      confirmKey: const Key('confirmDeleteCredentialButton'),
+    );
+
+    if (confirmed == true) {
+      await _deleteCredential(id);
+    }
+  }
+
+  Future<void> _deleteCredential(int id) async {
+    try {
+      await widget.repository.deleteById(id);
+      await _loadCredentials();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('无法删除取件凭证')));
+      }
+    }
+  }
+
+  Future<void> _markPickedUp(PickupCredential credential) async {
+    HapticFeedback.lightImpact();
+    await _runLifecycleAction(
+      credential,
+      () => widget.repository.markPickedUp(credential.id!),
+      successMessage: '已标记为已取件',
+    );
+  }
+
+  Future<void> _markPending(PickupCredential credential) async {
+    await _runLifecycleAction(
+      credential,
+      () => widget.repository.markPending(credential.id!),
+      successMessage: '已恢复为待取件',
+    );
+  }
+
+  Future<void> _runLifecycleAction(
+    PickupCredential credential,
+    Future<PickupCredential> Function() action, {
+    required String successMessage,
+  }) async {
+    final id = credential.id;
+    if (id == null) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('无法更新取件状态')));
+      return;
+    }
+
+    if (_updatingCredentialIds.contains(id)) {
+      return;
+    }
+
+    setState(() {
+      _updatingCredentialIds.add(id);
+    });
+
+    try {
+      await action();
+      await _loadCredentials();
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(successMessage)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('无法更新取件状态')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updatingCredentialIds.remove(id);
+        });
+      }
+    }
+  }
+
+  Future<void> _pickScreenshot() async {
+    final rawImagePaths =
+        await (widget.imagePathPicker ?? pickGalleryImagePaths)();
+    final imagePaths = normalizeBatchImagePaths(rawImagePaths);
+
+    if (imagePaths.isEmpty) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (rawImagePaths.length > imagePaths.length) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('一次最多处理 10 张截图，已导入前 10 张')));
+    }
+
+    final confirmedDrafts = await Navigator.of(context)
+        .push<List<PickupCredentialDraft>>(
+          adaptiveRoute(
+            context,
+            (context) =>
+                (widget.importPageBuilder ?? _defaultImportPageBuilder)(
+                  imagePaths,
+                ),
+          ),
+        );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (confirmedDrafts == null || confirmedDrafts.isEmpty) {
+      return;
+    }
+
+    final draftsToInsert = await _resolveDuplicateDrafts(confirmedDrafts);
+    if (!mounted || draftsToInsert == null) {
+      return;
+    }
+
+    if (draftsToInsert.isEmpty) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已跳过重复凭证')));
+      return;
+    }
+
+    await _saveDrafts(draftsToInsert);
+  }
+
+  Future<List<PickupCredentialDraft>?> _resolveDuplicateDrafts(
+    List<PickupCredentialDraft> confirmedDrafts,
+  ) async {
+    final duplicateResult = await PickupDuplicateDetector(
+      repository: widget.repository,
+    ).check(confirmedDrafts);
+
+    if (!mounted) {
+      return null;
+    }
+
+    if (!duplicateResult.hasDuplicates) {
+      return confirmedDrafts;
+    }
+
+    return Navigator.of(context).push<List<PickupCredentialDraft>>(
+      adaptiveRoute(
+        context,
+        (context) => DuplicateReviewPage(result: duplicateResult),
+      ),
+    );
+  }
+
+  Future<void> _saveDrafts(List<PickupCredentialDraft> drafts) async {
+    if (_isSaving) {
+      return;
+    }
+
+    if (drafts.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _saveErrorMessage = null;
+      _draftsWaitingForRetry = null;
+    });
+
+    try {
+      await widget.repository.insertAll(drafts);
+      await _loadCredentials();
+
+      if (mounted) {
+        final count = drafts.length;
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(count == 1 ? '已添加 1 个取件凭证' : '已添加 $count 个取件凭证'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saveErrorMessage = '无法保存取件信息';
+          _draftsWaitingForRetry = List<PickupCredentialDraft>.of(drafts);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('无法保存取件信息'),
+            action: SnackBarAction(
+              label: '重试',
+              onPressed: () {
+                final retryDrafts = _draftsWaitingForRetry;
+                if (retryDrafts != null) {
+                  _saveDrafts(retryDrafts);
+                }
+              },
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  List<int> get _credentialIds =>
+      _credentials.map((credential) => credential.id).whereType<int>().toList();
+
+  bool get _hasSelection => _selectedIds.isNotEmpty;
+
+  bool get _areAllCredentialsSelected {
+    final ids = _credentialIds;
+    return ids.isNotEmpty && ids.every(_selectedIds.contains);
+  }
+
+  String get _selectionCountText => '已选择 ${_selectedIds.length} 个';
+
+  void _enterSelectionMode([PickupCredential? credential]) {
+    if (_isBatchOperating) {
+      return;
+    }
+
+    setState(() {
+      _isSelectionMode = true;
+      final id = credential?.id;
+      if (id != null) {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (_isBatchOperating) {
+      return;
+    }
+
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelection(PickupCredential credential) {
+    final id = credential.id;
+    if (id == null || _isBatchOperating) {
+      return;
+    }
+
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+    HapticFeedback.selectionClick();
+  }
+
+  void _selectAllOrClear() {
+    if (_isBatchOperating) {
+      return;
+    }
+
+    setState(() {
+      if (_areAllCredentialsSelected) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds
+          ..clear()
+          ..addAll(_credentialIds);
+      }
+    });
+  }
+
+  Future<void> _markSelectedPickedUp() async {
+    await _runBatchUpdate(
+      () => widget.repository.markPickedUpAll(_selectedIds),
+      successMessageBuilder: (count) =>
+          count == 1 ? '已标记 1 个凭证为已取件' : '已标记 $count 个凭证为已取件',
+    );
+  }
+
+  Future<void> _markSelectedPending() async {
+    await _runBatchUpdate(
+      () => widget.repository.markPendingAll(_selectedIds),
+      successMessageBuilder: (count) =>
+          count == 1 ? '已恢复 1 个凭证为待取件' : '已恢复 $count 个凭证为待取件',
+    );
+  }
+
+  Future<void> _runBatchUpdate(
+    Future<List<PickupCredential>> Function() action, {
+    required String Function(int count) successMessageBuilder,
+  }) async {
+    if (_isBatchOperating || _selectedIds.isEmpty) {
+      return;
+    }
+
+    final selectedCount = _selectedIds.length;
+    setState(() {
+      _isBatchOperating = true;
+    });
+
+    try {
+      await action();
+      await _loadCredentials();
+      if (mounted) {
+        setState(() {
+          _selectedIds.clear();
+          _isSelectionMode = false;
+        });
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(successMessageBuilder(selectedCount))),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('无法更新取件状态')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBatchOperating = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteSelected() async {
+    if (_isBatchOperating || _selectedIds.isEmpty) {
+      return;
+    }
+
+    final selectedCount = _selectedIds.length;
+    final confirmed = await showAdaptiveDeleteDialog(
+      context,
+      title: '删除 $selectedCount 个取件凭证？',
+      content: '删除后无法恢复。',
+      cancelKey: const Key('cancelBatchDeleteButton'),
+      confirmKey: const Key('confirmBatchDeleteButton'),
+    );
+
+    if (confirmed == true) {
+      await _deleteSelected();
+    }
+  }
+
+  Future<void> _deleteSelected() async {
+    if (_isBatchOperating || _selectedIds.isEmpty) {
+      return;
+    }
+
+    final selectedCount = _selectedIds.length;
+    final selectedIds = Set<int>.of(_selectedIds);
+    setState(() {
+      _isBatchOperating = true;
+    });
+
+    try {
+      await widget.repository.deleteAll(selectedIds);
+      await _loadCredentials();
+      if (mounted) {
+        setState(() {
+          _selectedIds.clear();
+          _isSelectionMode = false;
+        });
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('已删除 $selectedCount 个取件凭证')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('无法删除取件凭证')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBatchOperating = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         surfaceTintColor: Colors.transparent,
         title: const Text(
           'PackageHub',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-          children: [
-            const Text(
-              '待取件',
-              style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
+        actions: [
+          if (_isSelectionMode) ...[
+            TextButton(
+              key: const Key('selectAllCredentialsButton'),
+              onPressed: _isBatchOperating ? null : _selectAllOrClear,
+              child: Text(_areAllCredentialsSelected ? '取消全选' : '全选'),
             ),
-            const SizedBox(height: 6),
+            TextButton(
+              key: const Key('cancelSelectionModeButton'),
+              onPressed: _isBatchOperating ? null : _exitSelectionMode,
+              child: const Text('取消'),
+            ),
+          ] else
+            TextButton(
+              key: const Key('enterSelectionModeButton'),
+              onPressed: _credentials.isEmpty || _isLoading
+                  ? null
+                  : () => _enterSelectionMode(),
+              child: const Text('批量操作'),
+            ),
+        ],
+      ),
+      body: SafeArea(child: _buildBody()),
+      bottomNavigationBar: _isSelectionMode ? _buildBatchActionBar() : null,
+      floatingActionButton: _isSelectionMode
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: 'addScreenshot',
+              onPressed: _isSaving ? null : _pickScreenshot,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: const Text('添加截图'),
+            ),
+    );
+  }
+
+  Widget _buildBody() {
+    Widget body;
+    if (_isLoading) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (_errorMessage != null) {
+      body = _buildErrorState();
+    } else if (_credentials.isEmpty) {
+      body = _buildEmptyState();
+    } else {
+      body = _buildCredentialList();
+    }
+
+    if (_saveErrorMessage == null) {
+      return body;
+    }
+
+    return Column(
+      children: [
+        _buildSaveErrorBanner(),
+        Expanded(child: body),
+      ],
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
             Text(
-              '2 个包裹等待领取',
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+              _errorMessage!,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 24),
-
-            const PickupCard(
-              platform: '淘宝',
-              pickupCode: '6-2-8-1',
-              station: '菜鸟驿站 · XX小区店',
-              timeText: '今天 10:32',
-              icon: Icons.local_shipping_outlined,
-            ),
-
-            const SizedBox(height: 16),
-
-            const PickupCard(
-              platform: '拼多多',
-              pickupCode: '3-5-2-7',
-              station: '丰巢智能柜 · 1号楼',
-              timeText: '昨天 18:05',
-              icon: Icons.inventory_2_outlined,
-            ),
-
-            const SizedBox(height: 32),
-
-            Text(
-              '已取件',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600,
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '暂无已取件包裹',
-                style: TextStyle(color: Colors.grey.shade500),
-              ),
+            FilledButton.tonal(
+              onPressed: _loadCredentials,
+              child: const Text('重试'),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _pickScreenshot(context),
-        icon: const Icon(Icons.add_photo_alternate_outlined),
-        label: const Text('添加截图'),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 20),
+            const Text(
+              '暂无取件凭证',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            Column(
+              children: [
+                Text(
+                  '添加快递截图后，',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+                ),
+                Text(
+                  'PackageHub 会自动识别取件信息。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
-}
 
-class ImportPreviewPage extends StatefulWidget {
-  final String imagePath;
+  Widget _buildSaveErrorBanner() {
+    final retryDrafts = _draftsWaitingForRetry;
 
-  const ImportPreviewPage({super.key, required this.imagePath});
-
-  @override
-  State<ImportPreviewPage> createState() => _ImportPreviewPageState();
-}
-
-class _ImportPreviewPageState extends State<ImportPreviewPage> {
-  final OcrService _ocrService = const OcrService();
-
-  bool _isRecognizing = false;
-  String? _recognizedText;
-  PickupCredentialDraft? _parsedDraft;
-  String? _errorMessage;
-
-  Future<void> _recognizeText() async {
-    if (_isRecognizing) {
-      return;
-    }
-
-    setState(() {
-      _isRecognizing = true;
-      _recognizedText = null;
-      _parsedDraft = null;
-      _errorMessage = null;
-    });
-
-    try {
-      final text = await _ocrService.recognizeText(widget.imagePath);
-      final parsedDraft = PickupParser.parse(text);
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _recognizedText = text.trim().isEmpty ? '未识别到文字' : text;
-        _parsedDraft = parsedDraft;
-      });
-    } on Object catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _errorMessage = _friendlyErrorMessage(error);
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isRecognizing = false;
-        });
-      }
-    }
-  }
-
-  String _friendlyErrorMessage(Object error) {
-    if (error is UnsupportedError) {
-      return error.message ?? '当前平台暂不支持 OCR。';
-    }
-
-    if (error is PlatformException) {
-      final message = error.message;
-      if (message == null || message.trim().isEmpty) {
-        return 'OCR 识别失败：${error.code}';
-      }
-
-      return 'OCR 识别失败：$message';
-    }
-
-    if (error is MissingPluginException) {
-      return 'OCR 通道未连接，请完全停止 App 后重新编译运行。';
-    }
-
-    return 'OCR 识别失败：$error';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('导入截图')),
-      body: SafeArea(
-        child: Column(
+    return Material(
+      color: Theme.of(context).colorScheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+        child: Row(
           children: [
             Expanded(
-              child: ColoredBox(
-                color: Colors.black,
-                child: Center(
-                  child: InteractiveViewer(
-                    minScale: 1,
-                    maxScale: 4,
-                    child: Image.file(
-                      File(widget.imagePath),
-                      fit: BoxFit.contain,
-                      width: double.infinity,
-                      height: double.infinity,
-                    ),
-                  ),
+              child: Text(
+                _saveErrorMessage!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            Container(
-              width: double.infinity,
-              color: Colors.white,
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+            TextButton(
+              key: const Key('retrySaveButton'),
+              onPressed: _isSaving || retryDrafts == null
+                  ? null
+                  : () => _saveDrafts(retryDrafts),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCredentialList() {
+    final pendingCredentials = _credentials
+        .where((credential) => credential.status == PickupStatus.pending)
+        .toList();
+    final unknownCredentials = _credentials
+        .where((credential) => credential.status == PickupStatus.unknown)
+        .toList();
+    final pickedUpCredentials = _credentials
+        .where((credential) => credential.status == PickupStatus.pickedUp)
+        .toList();
+
+    return RefreshIndicator(
+      onRefresh: _loadCredentials,
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, _isSelectionMode ? 24 : 96),
+        children: [
+          if (_isSelectionMode)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _selectionCountText,
+                key: const Key('selectedCredentialCount'),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          _buildCredentialSection('待取件', pendingCredentials),
+          _buildCredentialSection('未判断', unknownCredentials),
+          _buildCredentialSection('已取件', pickedUpCredentials),
+        ].whereType<Widget>().toList(),
+      ),
+    );
+  }
+
+  Widget? _buildCredentialSection(
+    String title,
+    List<PickupCredential> credentials,
+  ) {
+    if (credentials.isEmpty) {
+      return null;
+    }
+
+    return Semantics(
+      container: true,
+      child: Column(
+        key: Key('credentialSection-$title'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10, top: 8),
+            child: Text(
+              '$title · ${credentials.length}',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          for (final group in groupCredentialsByCourier(credentials))
+            _buildCourierGroup(group),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCourierGroup(CourierCredentialGroup group) {
+    return Column(
+      key: Key('credentialCourierGroup-${group.courierCompany.name}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 6),
+          child: Text(
+            '${group.courierCompany.displayName} · ${group.credentials.length}',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
+          ),
+        ),
+        for (final credential in group.credentials)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: PickupCredentialCard(
+              credential: credential,
+              isSelectionMode: _isSelectionMode,
+              isSelected:
+                  credential.id != null && _selectedIds.contains(credential.id),
+              isUpdating:
+                  credential.id != null &&
+                  _updatingCredentialIds.contains(credential.id),
+              onTap: () => _openCredentialDetail(credential),
+              onSelectionChanged: (_) => _toggleSelection(credential),
+              onDelete: () => _confirmDeleteCredential(credential),
+              onMarkPickedUp: credential.status == PickupStatus.pending
+                  ? () => _markPickedUp(credential)
+                  : null,
+              onMarkPending: credential.status == PickupStatus.pickedUp
+                  ? () => _markPending(credential)
+                  : null,
+              showCourierCompany: false,
+            ),
+          ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _buildBatchActionBar() {
+    final hasSelection = _hasSelection;
+    final canOperate = hasSelection && !_isBatchOperating;
+
+    return SafeArea(
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        elevation: 8,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _isBatchOperating ? '处理中...' : _selectionCountText,
+                  key: const Key('batchSelectedCredentialCount'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
                 children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _isRecognizing ? null : _recognizeText,
-                      child: _isRecognizing
-                          ? const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                                SizedBox(width: 10),
-                                Text('识别中...'),
-                              ],
-                            )
-                          : const Text('识别取件信息'),
+                  Expanded(
+                    child: FilledButton.tonal(
+                      key: const Key('batchMarkPickedUpButton'),
+                      onPressed: canOperate ? _markSelectedPickedUp : null,
+                      child: const Text('已取件'),
                     ),
                   ),
-                  if (_errorMessage != null) ...[
-                    const SizedBox(height: 14),
-                    Text(
-                      _errorMessage!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.tonal(
+                      key: const Key('batchMarkPendingButton'),
+                      onPressed: canOperate ? _markSelectedPending : null,
+                      child: const Text('恢复待取件'),
                     ),
-                  ],
-                  if (_recognizedText != null) ...[
-                    const SizedBox(height: 18),
-                    _ParsedResultView(draft: _parsedDraft!),
-                    const SizedBox(height: 12),
-                    _RawOcrTextTile(text: _recognizedText!),
-                  ],
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      key: const Key('batchDeleteButton'),
+                      onPressed: canOperate ? _confirmDeleteSelected : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                        foregroundColor: Theme.of(context).colorScheme.onError,
+                      ),
+                      child: const Text('删除'),
+                    ),
+                  ),
                 ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _RawOcrTextTile extends StatelessWidget {
-  final String text;
-
-  const _RawOcrTextTile({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          childrenPadding: EdgeInsets.zero,
-          initiallyExpanded: false,
-          title: const Text(
-            '原始 OCR 文本',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          children: [
-            Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(maxHeight: 180),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7F8FA),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
-              ),
-              child: SingleChildScrollView(
-                child: SelectableText(
-                  text,
-                  style: const TextStyle(height: 1.5),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ParsedResultView extends StatelessWidget {
-  final PickupCredentialDraft draft;
-
-  const _ParsedResultView({required this.draft});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '解析结果',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          _ParsedResultRow(label: '平台', value: draft.platform.displayName),
-          _ParsedResultRow(label: '取件码', value: draft.pickupCode ?? '未识别'),
-          _ParsedResultRow(label: '取件点', value: draft.stationName ?? '未识别'),
-          _ParsedResultRow(label: '状态', value: draft.status.displayName),
-        ],
-      ),
-    );
-  }
-}
-
-class _ParsedResultRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _ParsedResultRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 64,
-            child: Text(
-              '$label：',
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
-          ),
-          Expanded(
-            child: SelectableText(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class PickupCard extends StatelessWidget {
-  final String platform;
-  final String pickupCode;
-  final String station;
-  final String timeText;
-  final IconData icon;
-
-  const PickupCard({
-    super.key,
-    required this.platform,
-    required this.pickupCode,
-    required this.station,
-    required this.timeText,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  platform,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Text(
-                timeText,
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 28),
-
-          Text(
-            '取件码',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            pickupCode,
-            style: const TextStyle(
-              fontSize: 38,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 5,
-            ),
-          ),
-
-          const SizedBox(height: 26),
-
-          Row(
-            children: [
-              Icon(
-                Icons.location_on_outlined,
-                size: 18,
-                color: Colors.grey.shade600,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  station,
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 18),
-
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () {},
-              child: Text('在$platform中查看'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+Widget _defaultImportPageBuilder(List<String> imagePaths) {
+  return BatchImportPage(imagePaths: imagePaths);
 }

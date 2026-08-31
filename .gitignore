@@ -46,3 +46,35 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# test data
+/test_assets
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.p12
+*.mobileprovision
+
+# IDE and local tooling
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+.fvm/
+
+# Flutter/Dart generated reports and packaging output
+*.ipa
+*.apk
+*.aab
+*.app.dSYM.zip
+*.xcarchive/
+/dist/
+/releases/
+/screenshots/
+
+# macOS and desktop build output
+/macos/Flutter/ephemeral/
+/windows/flutter/ephemeral/
+/linux/flutter/ephemeral/

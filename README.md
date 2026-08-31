@@ -1,6 +1,26 @@
-# packagehub
+# PackageHub
 
-A new Flutter project.
+PackageHub is a Flutter app for organizing pickup credentials and quickly opening
+the corresponding identity-provider pages.
+
+## Included features
+
+- Import pickup information from images with OCR and review the parsed fields.
+- Batch review imported items and detect possible duplicate tracking numbers.
+- Store, edit, group, and search pickup credentials locally.
+- Resolve pickup zones on the station map using station-specific rules.
+- Launch supported identity-provider pages directly from a credential.
+
+## Development
+
+```bash
+flutter pub get
+flutter test
+```
+
+The repository intentionally excludes local secrets, Flutter build output, and
+release packages. Keep credentials in local `.env` files or platform keystores;
+use `.env.example` for values that are safe to document.
 
 ## Getting Started
 

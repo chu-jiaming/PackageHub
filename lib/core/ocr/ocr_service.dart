@@ -1,7 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-class OcrService {
+abstract interface class TextRecognitionService {
+  Future<String> recognizeText(String imagePath);
+}
+
+class OcrService implements TextRecognitionService {
   const OcrService() : _channel = _defaultChannel;
 
   @visibleForTesting
@@ -11,6 +15,7 @@ class OcrService {
 
   final MethodChannel _channel;
 
+  @override
   Future<String> recognizeText(String imagePath) async {
     if (imagePath.trim().isEmpty) {
       throw ArgumentError.value(imagePath, 'imagePath', 'Image path is empty.');

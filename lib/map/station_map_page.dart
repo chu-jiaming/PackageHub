@@ -1,0 +1,395 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:packagehub/core/repository/pickup_credential_repository.dart';
+import 'package:packagehub/features/credential/pickup_credential_detail_page.dart';
+import 'package:packagehub/map/pickup_zone.dart';
+import 'package:packagehub/map/pickup_zone_resolver.dart';
+import 'package:packagehub/map/station_map_definition.dart';
+import 'package:packagehub/models/pickup_credential.dart';
+import 'package:packagehub/models/pickup_credential_draft.dart';
+import 'package:packagehub/ui/adaptive.dart';
+
+class StationMapPage extends StatefulWidget {
+  final PickupCredentialRepositoryApi repository;
+  const StationMapPage({super.key, required this.repository});
+  @override
+  State<StationMapPage> createState() => StationMapPageState();
+}
+
+class StationMapPageState extends State<StationMapPage> {
+  final _resolver = const PickupZoneResolver();
+  Map<PickupZoneId, List<PickupCredential>> _groups = {};
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  Future<void> load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final all = await widget.repository.getAll();
+      final groups = <PickupZoneId, List<PickupCredential>>{};
+      for (final c in all.where((c) => c.status != PickupStatus.pickedUp)) {
+        groups.putIfAbsent(_resolver.resolve(c), () => []).add(c);
+      }
+      if (mounted) {
+        setState(() {
+          _groups = groups;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = '无法加载取件信息';
+        });
+      }
+    }
+  }
+
+  Future<void> _open(StationMapZoneDefinition zone) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: .52,
+        child: _ZoneSheet(
+          key: const Key('station-map-zone-sheet'),
+          zone: zone,
+          credentials: _groups[zone.id] ?? [],
+          repository: widget.repository,
+          onChanged: load,
+          onOpenDetail: (c) async {
+            Navigator.pop(context);
+            final changed = await Navigator.of(context).push(
+              adaptiveRoute(
+                context,
+                (_) => PickupCredentialDetailPage(
+                  credential: c,
+                  repository: widget.repository,
+                ),
+              ),
+            );
+            if (changed == true) load();
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('站点地图'),
+        actions: [
+          IconButton(
+            onPressed: load,
+            icon: const Icon(Icons.refresh),
+            tooltip: '重新加载',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (_loading) const LinearProgressIndicator(minHeight: 2),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Text(_error!),
+                  TextButton(onPressed: load, child: const Text('重新加载')),
+                ],
+              ),
+            ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final height = width * 1086 / 1448;
+                return Center(
+                  child: InteractiveViewer(
+                    minScale: .8,
+                    maxScale: 4,
+                    child: SizedBox(
+                      width: width,
+                      height: height,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: Image.asset(
+                              'lib/map/map.png',
+                              fit: BoxFit.fill,
+                            ),
+                          ),
+                          ...stationMapZones.map(
+                            (z) => _hotspot(z, width, height),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_groups[PickupZoneId.unmapped]?.isNotEmpty == true)
+            ListTile(
+              title: Text('未定位 ${_groups[PickupZoneId.unmapped]!.length}'),
+              leading: const Icon(CupertinoIcons.question_circle),
+              onTap: () => _open(
+                const StationMapZoneDefinition(
+                  id: PickupZoneId.unmapped,
+                  label: '未定位',
+                  subtitle: '需要确认区域',
+                  normalizedRect: Rect.fromLTRB(0, 0, 1, 1),
+                ),
+              ),
+            )
+          else if (!_loading && _groups.isEmpty)
+            const Padding(padding: EdgeInsets.all(8), child: Text('暂无待取件快递')),
+        ],
+      ),
+    );
+  }
+
+  Widget _hotspot(StationMapZoneDefinition z, double w, double h) {
+    final items = _groups[z.id] ?? [];
+    return Positioned(
+      left: z.normalizedRect.left * w,
+      top: z.normalizedRect.top * h,
+      width: z.normalizedRect.width * w,
+      height: z.normalizedRect.height * h,
+      child: _StationMapHotspot(
+        zone: z,
+        count: items.length,
+        onTap: () => _open(z),
+      ),
+    );
+  }
+}
+
+class StationMapHotspotStyle {
+  static BoxDecoration decoration({
+    required bool active,
+    required bool pressed,
+    required Color accent,
+  }) {
+    return BoxDecoration(
+      color: active ? accent.withValues(alpha: pressed ? .16 : .10) : null,
+      borderRadius: BorderRadius.zero,
+    );
+  }
+
+  static BoxDecoration badgeDecoration({
+    required Color accent,
+    required Color edge,
+  }) {
+    return BoxDecoration(
+      color: accent,
+      border: Border.all(color: edge.withValues(alpha: .9), width: 1.2),
+      borderRadius: BorderRadius.circular(10),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x26000000),
+          blurRadius: 2,
+          offset: Offset(0, 1),
+        ),
+      ],
+    );
+  }
+}
+
+class _StationMapHotspot extends StatefulWidget {
+  final StationMapZoneDefinition zone;
+  final int count;
+  final VoidCallback onTap;
+  const _StationMapHotspot({
+    required this.zone,
+    required this.count,
+    required this.onTap,
+  });
+
+  @override
+  State<_StationMapHotspot> createState() => _StationMapHotspotState();
+}
+
+class _StationMapHotspotState extends State<_StationMapHotspot> {
+  bool pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.count > 0;
+    final scheme = Theme.of(context).colorScheme;
+    final edge = Theme.of(context).brightness == Brightness.dark
+        ? scheme.surface
+        : Colors.white;
+    return Semantics(
+      button: true,
+      label: '${widget.zone.label}，${widget.zone.subtitle}，${widget.count} 件待取',
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onTapDown: active ? (_) => setState(() => pressed = true) : null,
+        onTapUp: active ? (_) => setState(() => pressed = false) : null,
+        onTapCancel: active ? () => setState(() => pressed = false) : null,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 100),
+                decoration: StationMapHotspotStyle.decoration(
+                  active: active,
+                  pressed: pressed,
+                  accent: scheme.primary,
+                ),
+              ),
+            ),
+            if (active)
+              Align(
+                alignment: widget.zone.badgeAnchor,
+                child: Container(
+                  key: Key('mapBadge_${widget.zone.id.name}'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: StationMapHotspotStyle.badgeDecoration(
+                    accent: scheme.primary,
+                    edge: edge,
+                  ),
+                  child: Text(
+                    '${widget.count}',
+                    style: TextStyle(
+                      color: edge,
+                      fontSize: 12,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ZoneSheet extends StatefulWidget {
+  final StationMapZoneDefinition zone;
+  final List<PickupCredential> credentials;
+  final PickupCredentialRepositoryApi repository;
+  final Future<void> Function() onChanged;
+  final Future<void> Function(PickupCredential) onOpenDetail;
+  const _ZoneSheet({
+    super.key,
+    required this.zone,
+    required this.credentials,
+    required this.repository,
+    required this.onChanged,
+    required this.onOpenDetail,
+  });
+  @override
+  State<_ZoneSheet> createState() => _ZoneSheetState();
+}
+
+class _ZoneSheetState extends State<_ZoneSheet> {
+  late List<PickupCredential> items;
+  final busy = <int>{};
+  @override
+  void initState() {
+    super.initState();
+    items = [...widget.credentials];
+  }
+
+  Future<void> pick(PickupCredential c) async {
+    if (c.id == null || busy.contains(c.id)) return;
+    setState(() => busy.add(c.id!));
+    try {
+      await widget.repository.markPickedUp(c.id!);
+      if (mounted) setState(() => items.removeWhere((x) => x.id == c.id));
+      await widget.onChanged();
+      HapticFeedback.lightImpact();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('无法更新取件状态')));
+      }
+    } finally {
+      if (mounted) setState(() => busy.remove(c.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${widget.zone.label} · ${widget.zone.subtitle}',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          Text(
+            '${items.length} 件',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          Expanded(
+            child: items.isEmpty
+                ? const Align(
+                    alignment: Alignment.topLeft,
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 24),
+                      child: Text('这里暂时没有待取件快递'),
+                    ),
+                  )
+                : ListView(
+                    padding: EdgeInsets.zero,
+                    children: items
+                        .map(
+                          (c) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            onTap: () => widget.onOpenDetail(c),
+                            title: Text(
+                              c.pickupCode?.trim().isNotEmpty == true
+                                  ? c.pickupCode!
+                                  : '无取件码',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${c.courierCompany.displayName}${c.trackingNumber == null ? '' : '\n${c.trackingNumber}'}',
+                            ),
+                            trailing: IconButton(
+                              tooltip: '标记为已取件',
+                              onPressed: busy.contains(c.id)
+                                  ? null
+                                  : () => pick(c),
+                              icon: const Icon(
+                                CupertinoIcons.check_mark_circled,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+          ),
+        ],
+      ),
+    ),
+  );
+}

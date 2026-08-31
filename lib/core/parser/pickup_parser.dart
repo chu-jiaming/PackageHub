@@ -1,4 +1,5 @@
 import 'package:packagehub/models/pickup_credential_draft.dart';
+import 'package:packagehub/map/station_pickup_rules.dart';
 
 class PickupParser {
   static const List<String> _pickupCodeKeywords = [
@@ -32,13 +33,49 @@ class PickupParser {
     '自提',
   ];
 
+  static final List<_CourierPattern> _courierPatterns = [
+    const _CourierPattern(CourierCompany.sfExpress, [
+      '顺丰速运',
+      '顺丰',
+      'SF EXPRESS',
+    ]),
+    const _CourierPattern(CourierCompany.yto, ['圆通速递', '圆通']),
+    const _CourierPattern(CourierCompany.zto, ['中通快递', '中通']),
+    const _CourierPattern(CourierCompany.sto, ['申通快递', '申通']),
+    const _CourierPattern(CourierCompany.yunda, ['韵达快递', '韵达']),
+    const _CourierPattern(CourierCompany.jtexpress, [
+      '极兔速递',
+      '极兔',
+      'J&T EXPRESS',
+      'J&T',
+    ]),
+    const _CourierPattern(CourierCompany.ems, ['邮政EMS', 'EMS']),
+    const _CourierPattern(CourierCompany.chinaPost, ['中国邮政', '邮政快递']),
+    const _CourierPattern(CourierCompany.jdLogistics, ['京东物流', '京东快递']),
+    const _CourierPattern(CourierCompany.deppon, ['德邦快递', '德邦']),
+    const _CourierPattern(CourierCompany.cainiaoExpress, ['菜鸟速递']),
+    const _CourierPattern(CourierCompany.bestExpress, ['百世快递', '百世']),
+  ];
+
   static final RegExp _dashPattern = RegExp('[－–—−‐‑‒]');
   static final RegExp _spacePattern = RegExp(r'[ \t]+');
   static final RegExp _dashSpacingPattern = RegExp(r'\s*-\s*');
   static final RegExp _pipeSpacingPattern = RegExp(r'\s*\|\s*');
   static final RegExp _pickupCodePattern = RegExp(
-    r'(?:取件码|取货码|提货码|自提码|身份码|开柜码)\s*[：:]?\s*([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)',
+    r'(?:取件码|取货码|提货码|自提码|身份码|开柜码)\s*(?:为|是)?\s*[：:]?\s*([A-Za-z0-9]+(?:\s*-[\s]*[A-Za-z0-9]+)*)',
   );
+  static final RegExp _pickupCodeByCredentialPattern = RegExp(
+    r'凭\s*[：:]?\s*([A-Za-z0-9]+(?:\s*-[\s]*\d+){2})(?=\s*(?:到|$))',
+  );
+  static final RegExp _trackingKeywordPattern = RegExp(
+    r'(?:运单号|快递单号|物流单号)\s*[：:]?\s*([A-Za-z0-9]{8,30})',
+  );
+  static final RegExp _trackingCandidatePattern = RegExp(
+    r'[A-Za-z]{1,4}\d[A-Za-z0-9]{7,25}|\d{10,18}',
+  );
+  static final RegExp _phoneNumberPattern = RegExp(r'^1[3-9]\d{9}$');
+  static final RegExp _orderNumberContextPattern = RegExp(r'订单编号|订单号');
+  static final RegExp _phoneContextPattern = RegExp(r'手机号|联系电话|电话');
 
   static PickupCredentialDraft parse(String rawText) {
     final normalizedText = normalizeText(rawText);
@@ -46,14 +83,21 @@ class PickupParser {
         .split('\n')
         .where((line) => line.isNotEmpty)
         .toList();
-    final pickupCodeResult = _parsePickupCode(lines);
+    final pickupCodeResult = _parsePickupCode(normalizedText, lines);
     final pickupCode = pickupCodeResult?.code;
+    final courierResult = _parseCourierCompany(lines);
+    final courierCompany =
+        courierResult?.company ??
+        StationPickupRules.resolveCourierFromPickupCode(pickupCode) ??
+        CourierCompany.unknown;
 
     return PickupCredentialDraft(
-      platform: _parsePlatform(normalizedText),
+      courierCompany: courierCompany,
+      trackingNumber: _parseTrackingNumber(lines, courierResult),
       pickupCode: pickupCode,
       stationName: _parseStationName(lines, pickupCodeResult?.lineIndex),
       status: _parseStatus(normalizedText, pickupCode),
+      sourcePlatform: _parsePlatform(normalizedText),
       rawText: normalizedText,
     );
   }
@@ -95,7 +139,36 @@ class PickupParser {
     return PackagePlatform.unknown;
   }
 
-  static _PickupCodeResult? _parsePickupCode(List<String> lines) {
+  static _PickupCodeResult? _parsePickupCode(
+    String normalizedText,
+    List<String> lines,
+  ) {
+    final explicitMatch = _pickupCodePattern.firstMatch(normalizedText);
+    final explicitCode = explicitMatch?.group(1);
+    if (explicitCode != null) {
+      final normalizedCode = normalizePickupCode(explicitCode);
+      if (_isValidPickupCode(normalizedCode)) {
+        return _PickupCodeResult(
+          normalizedCode,
+          _lineIndexAt(normalizedText, explicitMatch!.start),
+        );
+      }
+    }
+
+    final credentialMatch = _pickupCodeByCredentialPattern.firstMatch(
+      normalizedText,
+    );
+    final credentialCode = credentialMatch?.group(1);
+    if (credentialCode != null) {
+      final normalizedCode = normalizePickupCode(credentialCode);
+      if (_isValidPickupCode(normalizedCode)) {
+        return _PickupCodeResult(
+          normalizedCode,
+          _lineIndexAt(normalizedText, credentialMatch!.start),
+        );
+      }
+    }
+
     for (var i = 0; i < lines.length; i += 1) {
       final line = lines[i];
       if (!_containsAny(line, _pickupCodeKeywords)) {
@@ -112,9 +185,82 @@ class PickupParser {
         continue;
       }
 
-      final normalizedCode = _normalizePickupCode(candidate);
+      final normalizedCode = normalizePickupCode(candidate);
       if (_isValidPickupCode(normalizedCode)) {
         return _PickupCodeResult(normalizedCode, i);
+      }
+    }
+
+    return null;
+  }
+
+  static int _lineIndexAt(String text, int offset) {
+    return '\n'.allMatches(text.substring(0, offset)).length;
+  }
+
+  static _CourierResult? _parseCourierCompany(List<String> lines) {
+    for (var i = 0; i < lines.length; i += 1) {
+      final line = lines[i];
+      for (final pattern in _courierPatterns) {
+        final matchedKeyword = pattern.matchKeyword(line);
+        if (matchedKeyword != null) {
+          return _CourierResult(pattern.company, i, matchedKeyword);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  static String? _parseTrackingNumber(
+    List<String> lines,
+    _CourierResult? courierResult,
+  ) {
+    if (courierResult != null) {
+      final sameLineTrackingNumber = _extractTrackingNumber(
+        lines[courierResult.lineIndex],
+        courierKeyword: courierResult.matchedKeyword,
+        allowWithoutKeyword: true,
+      );
+      if (sameLineTrackingNumber != null) {
+        return sameLineTrackingNumber;
+      }
+
+      final nearbyTrackingNumber = _parseNearbyTrackingNumber(
+        lines,
+        courierResult.lineIndex,
+      );
+      if (nearbyTrackingNumber != null) {
+        return nearbyTrackingNumber;
+      }
+    }
+
+    for (final line in lines) {
+      final trackingNumber = _extractTrackingNumber(line);
+      if (trackingNumber != null) {
+        return trackingNumber;
+      }
+    }
+
+    return null;
+  }
+
+  static String? _parseNearbyTrackingNumber(
+    List<String> lines,
+    int courierLineIndex,
+  ) {
+    for (final offset in [1, -1, 2, -2]) {
+      final index = courierLineIndex + offset;
+      if (index < 0 || index >= lines.length) {
+        continue;
+      }
+
+      final trackingNumber = _extractTrackingNumber(
+        lines[index],
+        allowWithoutKeyword: true,
+      );
+      if (trackingNumber != null) {
+        return trackingNumber;
       }
     }
 
@@ -154,6 +300,56 @@ class PickupParser {
     return null;
   }
 
+  static String? _extractTrackingNumber(
+    String line, {
+    String? courierKeyword,
+    bool allowWithoutKeyword = false,
+  }) {
+    if (_orderNumberContextPattern.hasMatch(line)) {
+      return null;
+    }
+
+    if (_phoneContextPattern.hasMatch(line)) {
+      return null;
+    }
+
+    final keywordMatch = _trackingKeywordPattern.firstMatch(line);
+    if (keywordMatch != null) {
+      return _validTrackingNumberOrNull(keywordMatch.group(1));
+    }
+
+    if (!allowWithoutKeyword) {
+      return null;
+    }
+
+    final searchableText = courierKeyword == null
+        ? line
+        : line.replaceFirst(courierKeyword, ' ');
+
+    for (final match in _trackingCandidatePattern.allMatches(searchableText)) {
+      final candidate = _validTrackingNumberOrNull(match.group(0));
+      if (candidate != null) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  static String? _validTrackingNumberOrNull(String? candidate) {
+    if (candidate == null) {
+      return null;
+    }
+
+    final trackingNumber = candidate.trim();
+    if (trackingNumber.isEmpty ||
+        _phoneNumberPattern.hasMatch(trackingNumber)) {
+      return null;
+    }
+
+    return trackingNumber;
+  }
+
   static PickupStatus _parseStatus(String text, String? pickupCode) {
     if (pickupCode != null && _containsAny(text, _pendingKeywords)) {
       return PickupStatus.pending;
@@ -162,23 +358,13 @@ class PickupParser {
     return PickupStatus.unknown;
   }
 
-  static String _normalizePickupCode(String code) {
+  static String normalizePickupCode(String code) {
     final normalizedCode = code
         .trim()
         .replaceAll(_dashPattern, '-')
         .replaceAll(_dashSpacingPattern, '-');
 
-    return normalizedCode
-        .split('-')
-        .map(_normalizeOcrZeroInCodeSegment)
-        .join('-');
-  }
-
-  static String _normalizeOcrZeroInCodeSegment(String segment) {
-    return segment.replaceFirstMapped(
-      RegExp(r'^([A-Za-z])[Oo]$'),
-      (match) => '${match.group(1)}0',
-    );
+    return normalizedCode.split('-').join('-');
   }
 
   static bool _isValidPickupCode(String code) {
@@ -221,4 +407,31 @@ class _PickupCodeResult {
   final int lineIndex;
 
   const _PickupCodeResult(this.code, this.lineIndex);
+}
+
+class _CourierPattern {
+  final CourierCompany company;
+  final List<String> keywords;
+
+  const _CourierPattern(this.company, this.keywords);
+
+  String? matchKeyword(String text) {
+    final normalizedText = text.toUpperCase();
+
+    for (final keyword in keywords) {
+      if (normalizedText.contains(keyword.toUpperCase())) {
+        return keyword;
+      }
+    }
+
+    return null;
+  }
+}
+
+class _CourierResult {
+  final CourierCompany company;
+  final int lineIndex;
+  final String matchedKeyword;
+
+  const _CourierResult(this.company, this.lineIndex, this.matchedKeyword);
 }
