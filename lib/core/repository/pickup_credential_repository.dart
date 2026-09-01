@@ -2,6 +2,7 @@ import 'package:packagehub/core/database/packagehub_database.dart';
 import 'package:packagehub/core/duplicate/tracking_number_normalizer.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
+import 'package:packagehub/models/pickup_reminder_settings.dart';
 import 'package:sqflite/sqflite.dart';
 
 abstract interface class PickupCredentialRepositoryApi {
@@ -28,6 +29,7 @@ abstract interface class PickupCredentialRepositoryApi {
   Future<List<PickupCredential>> markPendingAll(Iterable<int> ids);
 
   Future<void> deleteAll(Iterable<int> ids);
+
 }
 
 /// Repository for managing pickup credential persistence.
@@ -41,6 +43,27 @@ class PickupCredentialRepository implements PickupCredentialRepositoryApi {
   PickupCredentialRepository(this._database);
 
   static const _tableName = 'pickup_credentials';
+  static const _settingsTableName = 'pickup_reminder_settings';
+
+  Future<PickupReminderSettings> getReminderSettings() async {
+    final db = await _database.database;
+    final rows = await db.query(_settingsTableName, where: 'id = 1', limit: 1);
+    if (rows.isEmpty) return const PickupReminderSettings();
+    final row = rows.first;
+    return PickupReminderSettings(
+      enabled: row['enabled'] == 1,
+      days: (row['days'] as int?)?.clamp(1, 30) ?? 3,
+    );
+  }
+
+  Future<void> saveReminderSettings(PickupReminderSettings settings) async {
+    final db = await _database.database;
+    await db.insert(_settingsTableName, {
+      'id': 1,
+      'enabled': settings.enabled ? 1 : 0,
+      'days': settings.days.clamp(1, 30),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
 
   /// Insert a single draft as a new credential.
   ///

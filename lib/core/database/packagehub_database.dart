@@ -1,7 +1,7 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-const int packageHubDatabaseVersion = 2;
+const int packageHubDatabaseVersion = 3;
 
 /// Local SQLite database for PackageHub persistence.
 ///
@@ -107,6 +107,14 @@ Future<void> createDatabaseSchema(Database db, int version) async {
       updated_at INTEGER NOT NULL
     )
   ''');
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS pickup_reminder_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      enabled INTEGER NOT NULL DEFAULT 1,
+      days INTEGER NOT NULL DEFAULT 3
+    )
+  ''');
+  await db.insert('pickup_reminder_settings', {'id': 1, 'enabled': 1, 'days': 3}, conflictAlgorithm: ConflictAlgorithm.replace);
 }
 
 Future<void> upgradeDatabaseSchema(
@@ -116,6 +124,16 @@ Future<void> upgradeDatabaseSchema(
 ) async {
   if (oldVersion < 2 && newVersion >= 2) {
     await _migrateFromV1ToV2(db);
+  }
+  if (oldVersion < 3 && newVersion >= 3) {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pickup_reminder_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 1,
+        days INTEGER NOT NULL DEFAULT 3
+      )
+    ''');
+    await db.insert('pickup_reminder_settings', {'id': 1, 'enabled': 1, 'days': 3}, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }
 

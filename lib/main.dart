@@ -14,6 +14,10 @@ import 'package:packagehub/models/pickup_credential_draft.dart';
 import 'package:packagehub/ui/adaptive.dart';
 import 'package:packagehub/core/launcher/identity_launcher.dart';
 import 'package:packagehub/features/identity/identity_hub_page.dart';
+import 'package:packagehub/features/settings/pickup_reminder_settings_page.dart';
+import 'package:packagehub/core/reminder/pickup_reminder_service.dart';
+import 'package:packagehub/core/reminder/pickup_notification_service.dart';
+import 'package:packagehub/models/pickup_reminder_settings.dart';
 import 'package:packagehub/map/station_map_page.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -154,6 +158,9 @@ class _HomePageState extends State<HomePage> {
   bool _isSelectionMode = false;
   final Set<int> _selectedIds = {};
   bool _isBatchOperating = false;
+  PickupReminderSettings _reminderSettings = const PickupReminderSettings();
+  final _reminderService = const PickupReminderService();
+  final _notificationService = PickupNotificationService();
 
   @override
   void initState() {
@@ -172,12 +179,22 @@ class _HomePageState extends State<HomePage> {
 
     try {
       final credentials = await widget.repository.getAll();
+      final reminderSettings = widget.repository is PickupCredentialRepository
+          ? await (widget.repository as PickupCredentialRepository).getReminderSettings()
+          : const PickupReminderSettings();
       if (mounted) {
         setState(() {
           _credentials = credentials;
+          _reminderSettings = reminderSettings;
           _selectedIds.retainAll(_credentialIds);
           _isLoading = false;
         });
+        if (widget.repository is PickupCredentialRepository) {
+          await _notificationService.sync(
+            credentials,
+            settings: reminderSettings,
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -187,6 +204,15 @@ class _HomePageState extends State<HomePage> {
         });
       }
     }
+  }
+
+  Future<void> _openReminderSettings() async {
+    final repository = widget.repository;
+    if (repository is! PickupCredentialRepository) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => PickupReminderSettingsPage(repository: repository),
+    ));
+    await _loadCredentials();
   }
 
   Future<void> _openCredentialDetail(PickupCredential credential) async {
@@ -638,6 +664,13 @@ class _HomePageState extends State<HomePage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
+          if (!_isSelectionMode)
+            IconButton(
+              key: const Key('pickupReminderSettingsButton'),
+              tooltip: '取件提醒设置',
+              icon: const Icon(Icons.notifications_outlined),
+              onPressed: _openReminderSettings,
+            ),
           if (_isSelectionMode) ...[
             TextButton(
               key: const Key('selectAllCredentialsButton'),
@@ -684,13 +717,24 @@ class _HomePageState extends State<HomePage> {
       body = _buildCredentialList();
     }
 
-    if (_saveErrorMessage == null) {
+    final due = _reminderService.dueCredentials(
+      _credentials,
+      settings: _reminderSettings,
+    );
+    if (_saveErrorMessage == null && due.isEmpty) {
       return body;
     }
 
     return Column(
       children: [
-        _buildSaveErrorBanner(),
+        if (due.isNotEmpty)
+          MaterialBanner(
+            key: const Key('pickupReminderBanner'),
+            leading: const Icon(Icons.notifications_active_outlined),
+            content: Text('有 ${due.length} 个包裹已超过 ${_reminderSettings.days} 天未取件'),
+            actions: const [SizedBox.shrink()],
+          ),
+        if (_saveErrorMessage != null) _buildSaveErrorBanner(),
         Expanded(child: body),
       ],
     );
