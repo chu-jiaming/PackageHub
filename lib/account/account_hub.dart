@@ -13,6 +13,7 @@ import 'package:packagehub/design_system/components/ph_grouped_section.dart';
 import 'package:packagehub/design_system/components/ph_icon_button.dart';
 import 'package:packagehub/design_system/components/ph_list_row.dart';
 import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
+import 'package:packagehub/design_system/tokens/ph_radius.dart';
 import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 import 'package:packagehub/design_system/tokens/ph_typography.dart';
 
@@ -55,6 +56,7 @@ class _AccountHubState extends State<AccountHub> {
     final entitlement = widget.subscriptionRepository.current;
     final colors = PHColorScheme.of(context);
     final width = (MediaQuery.sizeOf(context).width * .84).clamp(300.0, 400.0);
+    final panelRadius = BorderRadius.circular(PHRadius.xl);
     return Positioned.fill(
       child: Stack(
         children: [
@@ -64,6 +66,7 @@ class _AccountHubState extends State<AccountHub> {
             child: Container(color: Colors.black.withValues(alpha: .20)),
           ),
           SafeArea(
+            minimum: const EdgeInsets.all(PHSpacing.sm),
             child: Align(
               alignment: Alignment.centerLeft,
               child: GestureDetector(
@@ -81,40 +84,57 @@ class _AccountHubState extends State<AccountHub> {
                     end: _isClosing ? -1 : 0,
                   ),
                   builder: (context, value, child) => Transform.translate(
-                    offset: Offset(width * value, 0),
+                    offset: Offset((width + PHSpacing.sm) * value, 0),
                     child: child,
                   ),
-                  child: Material(
-                    color: colors.bgSurface,
-                    elevation: 12,
-                    child: SizedBox(
-                      width: width,
-                      height: double.infinity,
-                      child: _DrawerContent(
-                        state: state,
-                        entitlement: entitlement,
-                        onAccount: () => _open(
-                          AccountPage(
-                            accountRepository: widget.accountRepository,
+                  child: DecoratedBox(
+                    key: const Key('accountHubPanelSurface'),
+                    decoration: BoxDecoration(
+                      color: colors.bgSurface,
+                      borderRadius: panelRadius,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(context).shadowColor
+                              .withValues(alpha: .18),
+                          blurRadius: 24,
+                          offset: const Offset(4, 0),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: panelRadius,
+                      child: Material(
+                        color: colors.bgSurface,
+                        child: SizedBox(
+                          width: width,
+                          height: double.infinity,
+                          child: _DrawerContent(
+                            state: state,
+                            entitlement: entitlement,
+                            onAccount: () => _open(
+                              AccountPage(
+                                accountRepository: widget.accountRepository,
+                              ),
+                            ),
+                            onSubscription: () => _open(
+                              SubscriptionPage(
+                                subscriptionRepository:
+                                    widget.subscriptionRepository,
+                                accountRepository: widget.accountRepository,
+                              ),
+                            ),
+                            onDevices: () => _open(
+                              DevicesPage(
+                                accountRepository: widget.accountRepository,
+                              ),
+                            ),
+                            onDataPrivacy: () => _open(const DataPrivacyPage()),
+                            onSettings: () => _open(const SettingsPage()),
+                            onHelp: () => _open(const HelpFeedbackPage()),
+                            onAbout: () => _open(const AboutPage()),
+                            onDismiss: _dismiss,
                           ),
                         ),
-                        onSubscription: () => _open(
-                          SubscriptionPage(
-                            subscriptionRepository:
-                                widget.subscriptionRepository,
-                            accountRepository: widget.accountRepository,
-                          ),
-                        ),
-                        onDevices: () => _open(
-                          DevicesPage(
-                            accountRepository: widget.accountRepository,
-                          ),
-                        ),
-                        onDataPrivacy: () => _open(const DataPrivacyPage()),
-                        onSettings: () => _open(const SettingsPage()),
-                        onHelp: () => _open(const HelpFeedbackPage()),
-                        onAbout: () => _open(const AboutPage()),
-                        onDismiss: _dismiss,
                       ),
                     ),
                   ),
