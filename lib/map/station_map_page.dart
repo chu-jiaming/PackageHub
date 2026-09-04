@@ -135,6 +135,10 @@ class StationMapPageState extends State<StationMapPage> {
                     ? constraints.maxWidth - 16
                     : 0.0;
                 final height = width * 1086 / 1448;
+                final boundaryMargin = EdgeInsets.symmetric(
+                  horizontal: (constraints.maxWidth - width) / 2,
+                  vertical: (constraints.maxHeight - height) / 2,
+                );
                 _initializeMapTransformIfNeeded(
                   viewport: Size(constraints.maxWidth, constraints.maxHeight),
                   content: Size(width, height),
@@ -149,7 +153,7 @@ class StationMapPageState extends State<StationMapPage> {
                     scaleEnabled: true,
                     constrained: false,
                     alignment: Alignment.center,
-                    boundaryMargin: EdgeInsets.zero,
+                    boundaryMargin: boundaryMargin,
                     clipBehavior: Clip.hardEdge,
                     child: SizedBox(
                       key: const Key('station-map-content'),

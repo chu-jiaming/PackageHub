@@ -99,6 +99,11 @@ void main() {
     final content = find.byKey(const Key('station-map-content'));
 
     expect(viewer.constrained, isFalse);
+    expect(viewer.boundaryMargin.vertical, greaterThan(0));
+    expect(
+      viewer.transformationController!.value.getMaxScaleOnAxis(),
+      closeTo(1, .001),
+    );
     expect(
       find.descendant(of: find.byType(InteractiveViewer), matching: content),
       findsOneWidget,
@@ -138,6 +143,54 @@ void main() {
         matching: find.byKey(const Key('mapBadge_c')),
       ),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('pinch zoom can return to the fit-width scale', (tester) async {
+    await pumpMap(tester);
+
+    final viewerFinder = find.byType(InteractiveViewer);
+    final viewer = tester.widget<InteractiveViewer>(viewerFinder);
+    final firstFinger = await tester.startGesture(
+      const Offset(150, 400),
+      pointer: 1,
+    );
+    final secondFinger = await tester.startGesture(
+      const Offset(240, 400),
+      pointer: 2,
+    );
+    await tester.pump();
+    await firstFinger.moveTo(const Offset(110, 400));
+    await secondFinger.moveTo(const Offset(280, 400));
+    await tester.pump();
+    await firstFinger.up();
+    await secondFinger.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      viewer.transformationController!.value.getMaxScaleOnAxis(),
+      greaterThan(1),
+    );
+
+    final thirdFinger = await tester.startGesture(
+      const Offset(110, 400),
+      pointer: 3,
+    );
+    final fourthFinger = await tester.startGesture(
+      const Offset(280, 400),
+      pointer: 4,
+    );
+    await tester.pump();
+    await thirdFinger.moveTo(const Offset(150, 400));
+    await fourthFinger.moveTo(const Offset(240, 400));
+    await tester.pump();
+    await thirdFinger.up();
+    await fourthFinger.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      viewer.transformationController!.value.getMaxScaleOnAxis(),
+      closeTo(1, .001),
     );
   });
 }
