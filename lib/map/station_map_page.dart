@@ -12,6 +12,7 @@ import 'package:packagehub/design_system/components/ph_icon_button.dart';
 import 'package:packagehub/design_system/components/ph_list_row.dart';
 import 'package:packagehub/design_system/components/ph_navigation_header.dart';
 import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 import 'package:packagehub/features/credential/pickup_credential_detail_page.dart';
 import 'package:packagehub/map/pickup_zone.dart';
 import 'package:packagehub/map/pickup_zone_resolver.dart';
@@ -89,30 +90,27 @@ class StationMapPageState extends State<StationMapPage> {
   Future<void> _open(StationMapZoneDefinition zone) async {
     await showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
+      showDragHandle: false,
       isScrollControlled: true,
-      builder: (_) => FractionallySizedBox(
-        heightFactor: .52,
-        child: _ZoneSheet(
-          key: const Key('station-map-zone-sheet'),
-          zone: zone,
-          credentials: _groups[zone.id] ?? [],
-          repository: widget.repository,
-          onChanged: load,
-          onOpenDetail: (c) async {
-            Navigator.pop(context);
-            final changed = await Navigator.of(context).push(
-              adaptiveRoute(
-                context,
-                (_) => PickupCredentialDetailPage(
-                  credential: c,
-                  repository: widget.repository,
-                ),
+      builder: (_) => _ZoneSheet(
+        key: const Key('station-map-zone-sheet'),
+        zone: zone,
+        credentials: _groups[zone.id] ?? [],
+        repository: widget.repository,
+        onChanged: load,
+        onOpenDetail: (c) async {
+          Navigator.pop(context);
+          final changed = await Navigator.of(context).push(
+            adaptiveRoute(
+              context,
+              (_) => PickupCredentialDetailPage(
+                credential: c,
+                repository: widget.repository,
               ),
-            );
-            if (changed == true) load();
-          },
-        ),
+            ),
+          );
+          if (changed == true) load();
+        },
       ),
     );
   }
@@ -562,37 +560,51 @@ class _ZoneSheetState extends State<_ZoneSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: PHBottomSheet(
-      title: '${widget.zone.label} · ${widget.zone.subtitle}',
-      subtitle: '${items.length} 件',
-      child: Expanded(
-        child: items.isEmpty
-            ? const PHEmptyState(title: '这里暂时没有待取件快递')
-            : PHGroupedSection(
-                children: [
-                  for (var index = 0; index < items.length; index++)
-                    PHListRow(
-                      title: items[index].pickupCode?.trim().isNotEmpty == true
-                          ? items[index].pickupCode!
-                          : '无取件码',
-                      subtitle:
-                          '${items[index].courierCompany.displayName}${items[index].trackingNumber == null ? '' : '\n${items[index].trackingNumber}'}',
-                      onTap: () => widget.onOpenDetail(items[index]),
-                      showChevron: false,
-                      showSeparator: index < items.length - 1,
-                      trailing: PHIconButton(
-                        tooltip: '标记为已取件',
-                        semanticsLabel: '标记为已取件',
-                        onPressed: busy.contains(items[index].id)
-                            ? null
-                            : () => pick(items[index]),
-                        icon: const Icon(CupertinoIcons.check_mark_circled),
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.sizeOf(context).height * .7;
+    return SafeArea(
+      bottom: true,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: PHBottomSheet(
+          sizing: PHBottomSheetSizing.scrollable,
+          title: '${widget.zone.label} · ${widget.zone.subtitle}',
+          subtitle: '${items.length} 件',
+          child: ListView(
+            shrinkWrap: true,
+            padding: EdgeInsets.fromLTRB(0, PHSpacing.xs, 0, PHSpacing.lg),
+            children: [
+              if (items.isEmpty)
+                const PHEmptyState(title: '这里暂时没有待取件快递')
+              else
+                PHGroupedSection(
+                  children: [
+                    for (var index = 0; index < items.length; index++)
+                      PHListRow(
+                        title:
+                            items[index].pickupCode?.trim().isNotEmpty == true
+                            ? items[index].pickupCode!
+                            : '无取件码',
+                        subtitle:
+                            '${items[index].courierCompany.displayName}${items[index].trackingNumber == null ? '' : '\n${items[index].trackingNumber}'}',
+                        onTap: () => widget.onOpenDetail(items[index]),
+                        showChevron: false,
+                        showSeparator: index < items.length - 1,
+                        trailing: PHIconButton(
+                          tooltip: '标记为已取件',
+                          semanticsLabel: '标记为已取件',
+                          onPressed: busy.contains(items[index].id)
+                              ? null
+                              : () => pick(items[index]),
+                          icon: const Icon(CupertinoIcons.check_mark_circled),
+                        ),
                       ),
-                    ),
-                ],
-              ),
+                  ],
+                ),
+            ],
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

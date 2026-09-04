@@ -14,10 +14,13 @@ Future<bool> showProUpgradeSheet(
 }) async {
   final openPro = await showModalBottomSheet<bool>(
     context: context,
+    isScrollControlled: true,
     showDragHandle: false,
     backgroundColor: Colors.transparent,
     builder: (context) => SafeArea(
+      bottom: true,
       child: PHBottomSheet(
+        sizing: PHBottomSheetSizing.content,
         title: title,
         actions: [
           PHButton(

@@ -4,6 +4,8 @@ import 'package:packagehub/design_system/tokens/ph_radius.dart';
 import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 import 'package:packagehub/design_system/tokens/ph_typography.dart';
 
+enum PHBottomSheetSizing { content, scrollable }
+
 /// Surface and layout for a bottom sheet. Modal presentation is caller-owned.
 class PHBottomSheet extends StatelessWidget {
   final String? title;
@@ -14,6 +16,8 @@ class PHBottomSheet extends StatelessWidget {
   final List<Widget> actions;
   final bool showDragHandle;
   final EdgeInsetsGeometry padding;
+  final PHBottomSheetSizing sizing;
+  final double maxHeightFactor;
 
   const PHBottomSheet({
     super.key,
@@ -30,78 +34,87 @@ class PHBottomSheet extends StatelessWidget {
       PHSpacing.lg,
       PHSpacing.lg,
     ),
-  });
+    this.sizing = PHBottomSheetSizing.content,
+    this.maxHeightFactor = .85,
+  }) : assert(maxHeightFactor > 0 && maxHeightFactor <= 1);
 
   @override
   Widget build(BuildContext context) {
     final colors = PHColorScheme.of(context);
+    final maxHeight = MediaQuery.sizeOf(context).height * maxHeightFactor;
+    final sizedChild = sizing == PHBottomSheetSizing.scrollable
+        ? Flexible(fit: FlexFit.loose, child: child)
+        : child;
     return Material(
       color: colors.bgSurface,
       borderRadius: const BorderRadius.vertical(
         top: Radius.circular(PHRadius.xl),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: padding,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (showDragHandle)
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colors.borderStrong,
-                    borderRadius: BorderRadius.circular(PHRadius.full),
-                  ),
-                ),
-              ),
-            if (showDragHandle && (title != null || leading != null))
-              const SizedBox(height: PHSpacing.md),
-            if (title != null || leading != null || trailing != null)
-              Row(
-                children: [
-                  if (leading != null) ...[
-                    leading!,
-                    const SizedBox(width: PHSpacing.sm),
-                  ],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (title != null)
-                          Text(
-                            title!,
-                            style: PHTypography.title3.copyWith(
-                              color: colors.textPrimary,
-                            ),
-                          ),
-                        if (subtitle != null)
-                          Text(
-                            subtitle!,
-                            style: PHTypography.subheadline.copyWith(
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                      ],
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Padding(
+          padding: padding,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (showDragHandle)
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.borderStrong,
+                      borderRadius: BorderRadius.circular(PHRadius.full),
                     ),
                   ),
-                  ?trailing,
+                ),
+              if (showDragHandle && (title != null || leading != null))
+                const SizedBox(height: PHSpacing.md),
+              if (title != null || leading != null || trailing != null)
+                Row(
+                  children: [
+                    if (leading != null) ...[
+                      leading!,
+                      const SizedBox(width: PHSpacing.sm),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (title != null)
+                            Text(
+                              title!,
+                              style: PHTypography.title3.copyWith(
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                          if (subtitle != null)
+                            Text(
+                              subtitle!,
+                              style: PHTypography.subheadline.copyWith(
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    ?trailing,
+                  ],
+                ),
+              if (title != null || leading != null || trailing != null)
+                const SizedBox(height: PHSpacing.md),
+              sizedChild,
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: PHSpacing.md),
+                for (var i = 0; i < actions.length; i++) ...[
+                  if (i > 0) const SizedBox(height: PHSpacing.sm),
+                  actions[i],
                 ],
-              ),
-            if (title != null || leading != null || trailing != null)
-              const SizedBox(height: PHSpacing.md),
-            child,
-            if (actions.isNotEmpty) ...[
-              const SizedBox(height: PHSpacing.md),
-              for (var i = 0; i < actions.length; i++) ...[
-                if (i > 0) const SizedBox(height: PHSpacing.sm),
-                actions[i],
               ],
             ],
-          ],
+          ),
         ),
       ),
     );

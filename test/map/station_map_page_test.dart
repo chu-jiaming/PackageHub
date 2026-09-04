@@ -14,7 +14,7 @@ class _EmptyRepository implements PickupCredentialRepositoryApi {
   Future<List<PickupCredential>> getAll() async => items;
 
   @override
-  Future<List<PickupCredential>> getPending() async => [];
+  Future<List<PickupCredential>> getPending() async => items;
 
   @override
   Future<List<PickupCredential>> getPickedUp() async => [];
@@ -55,7 +55,10 @@ class _EmptyRepository implements PickupCredentialRepositoryApi {
 }
 
 void main() {
-  Future<void> pumpMap(WidgetTester tester) async {
+  Future<void> pumpMap(
+    WidgetTester tester, {
+    List<PickupCredential> items = const [],
+  }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -63,7 +66,12 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
     await tester.pumpWidget(
-      MaterialApp(home: StationMapPage(repository: _EmptyRepository())),
+      MaterialApp(
+        home: StationMapPage(
+          key: ValueKey(items.length),
+          repository: _EmptyRepository(items),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -332,4 +340,62 @@ void main() {
     expect(renderedScenePoint.dx, closeTo(globalFocalPoint.dx, .01));
     expect(renderedScenePoint.dy, closeTo(globalFocalPoint.dy, .01));
   });
+
+  testWidgets('zone sheet hugs one credential and caps a long list', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpMap(tester, items: [_credential(1)]);
+    await tester.tap(find.byKey(const Key('mapBadge_c')));
+    await tester.pumpAndSettle();
+    final oneCredentialHeight = tester
+        .getSize(find.byKey(const Key('station-map-zone-sheet')))
+        .height;
+    expect(find.text('C-1'), findsOneWidget);
+    Navigator.of(
+      tester.element(find.byKey(const Key('station-map-zone-sheet'))),
+    ).pop();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('station-map-zone-sheet')), findsNothing);
+
+    await pumpMap(
+      tester,
+      items: [for (var id = 1; id <= 10; id++) _credential(id)],
+    );
+    await tester.tap(find.byKey(const Key('mapBadge_c')));
+    await tester.pumpAndSettle();
+    final tenCredentialHeight = tester
+        .getSize(find.byKey(const Key('station-map-zone-sheet')))
+        .height;
+
+    expect(tenCredentialHeight, greaterThan(oneCredentialHeight));
+    expect(tenCredentialHeight, lessThanOrEqualTo(844 * .7));
+    final sheetScrollView = find.byType(Scrollable).last;
+    await tester.scrollUntilVisible(
+      find.text('C-10'),
+      300,
+      scrollable: sheetScrollView,
+    );
+    expect(find.text('C-10'), findsOneWidget);
+  });
+}
+
+PickupCredential _credential(int id) {
+  final now = DateTime(2026);
+  return PickupCredential(
+    id: id,
+    courierCompany: CourierCompany.zto,
+    pickupCode: 'C-$id',
+    trackingNumber: 'ZT$id',
+    status: PickupStatus.pending,
+    sourcePlatform: PackagePlatform.unknown,
+    createdAt: now,
+    updatedAt: now,
+  );
 }
