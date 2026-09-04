@@ -7,6 +7,7 @@ import Security
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var ocrChannel: FlutterMethodChannel?
   private let appleSignInService = AppleSignInService()
+  private var storeKitService: AnyObject?
 
   override func application(
     _ application: UIApplication,
@@ -20,6 +21,14 @@ import Security
     registerOcrChannel(messenger: engineBridge.applicationRegistrar.messenger())
     registerAppleSignInChannel(messenger: engineBridge.applicationRegistrar.messenger())
     registerKeychainChannel(messenger: engineBridge.applicationRegistrar.messenger())
+    if #available(iOS 15.0, *) {
+      let service = StoreKitService()
+      service.attach(messenger: engineBridge.applicationRegistrar.messenger())
+      FlutterMethodChannel(name: "packagehub/storekit", binaryMessenger: engineBridge.applicationRegistrar.messenger()).setMethodCallHandler { call, result in
+        service.handle(call, result: result)
+      }
+      storeKitService = service
+    }
   }
 
   private func registerKeychainChannel(messenger: FlutterBinaryMessenger) {
