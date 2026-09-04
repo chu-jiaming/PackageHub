@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../debug_entitlement_override_policy.dart';
 import '../storekit_models.dart';
 import '../subscription_entitlement.dart';
 import '../subscription_repository.dart';
@@ -27,12 +28,10 @@ class DebugSubscriptionOverrideController {
     if (mode == DebugEntitlementMode.storeKit) {
       mode = DebugEntitlementMode.automatic;
     }
-    if (!kDebugMode || mode == _mode) return;
+    if (!devEntitlementOverrideAllowed || mode == _mode) return;
     final previous = _mode;
     _mode = mode;
-    if (kDebugMode) {
-      debugPrint('Debug entitlement override: ${previous.name} → ${mode.name}');
-    }
+    debugPrint('Debug entitlement override: ${previous.name} → ${mode.name}');
     _changes.add(mode);
   }
 
@@ -64,7 +63,7 @@ class ResolvedSubscriptionRepository implements SubscriptionRepository {
   SubscriptionEntitlement get current => _resolve();
 
   SubscriptionEntitlement _resolve() {
-    if (!kDebugMode ||
+    if (!devEntitlementOverrideAllowed ||
         mode == DebugEntitlementMode.automatic ||
         mode == DebugEntitlementMode.storeKit) {
       return backendSubscriptionRepository.current;

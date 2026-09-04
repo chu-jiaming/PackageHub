@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:packagehub/account/account_pages.dart';
 import 'package:packagehub/subscription/debug/debug_subscription_override.dart';
+import 'package:packagehub/subscription/debug_entitlement_override_policy.dart';
 import 'package:packagehub/subscription/entitlement_pro_feature_access.dart';
 import 'package:packagehub/subscription/pro_feature.dart';
 import 'package:packagehub/subscription/storekit_models.dart';
@@ -34,6 +35,10 @@ class _MutableRepository extends SubscriptionRepository {
 }
 
 void main() {
+  test('debug builds allow the entitlement override by default', () {
+    expect(devEntitlementOverrideAllowed, isTrue);
+  });
+
   testWidgets('debug entitlement segments respond to real taps and jitter', (
     tester,
   ) async {

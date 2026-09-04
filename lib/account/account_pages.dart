@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:packagehub/account/account_repository.dart';
 import 'package:packagehub/account/account_user.dart';
@@ -9,6 +8,7 @@ import 'package:packagehub/subscription/subscription_repository.dart';
 import 'package:packagehub/subscription/subscription_entitlement.dart';
 import 'package:packagehub/subscription/storekit_models.dart';
 import 'package:packagehub/subscription/debug/debug_subscription_override.dart';
+import 'package:packagehub/subscription/debug_entitlement_override_policy.dart';
 
 void showPhaseOneNotice(BuildContext context, String message) {
   showCupertinoDialog<void>(
@@ -179,7 +179,7 @@ class SubscriptionPage extends StatelessWidget {
                 onPressed: () => subscriptionRepository.restorePurchases(),
                 child: const Text('恢复购买'),
               ),
-              if (kDebugMode &&
+              if (devEntitlementOverrideAllowed &&
                   subscriptionRepository is ResolvedSubscriptionRepository)
                 _DebugSubscriptionControls(
                   repository:

@@ -17,6 +17,13 @@ set -euo pipefail
 #
 #   ./scripts/build_ipa.sh --cleanup-build
 #
+#   ./scripts/build_ipa.sh --dev-entitlement-override
+#
+#   ./scripts/build_ipa.sh \
+#     --dev-entitlement-override \
+#     --clean \
+#     --check
+#
 # Options:
 #
 #   --clean
@@ -28,17 +35,43 @@ set -euo pipefail
 #   --cleanup-build
 #       Remove ./build after IPA is successfully generated.
 #
+#   --dev-entitlement-override
+#       Build a Release IPA with the PackageHub development
+#       entitlement override explicitly enabled.
+#
+#       This enables the:
+#
+#           真实 / Free / Pro
+#
+#       development selector in a Release build.
+#
+#       Internally adds:
+#
+#           --dart-define=PACKAGEHUB_DEV_ENTITLEMENT_OVERRIDE=true
+#
+#       IMPORTANT:
+#       Do NOT use this option for App Store production builds.
+#
 # Output:
 #
-#   dist/PackageHub-<version>-unsigned.ipa
+#   Normal Release:
+#
+#     dist/PackageHub-<version>-unsigned.ipa
+#
+#   Development entitlement Release:
+#
+#     dist/PackageHub-<version>-dev-entitlement-unsigned.ipa
 #
 # Example:
 #
 #   pubspec.yaml:
 #     version: 1.0.3+7
 #
-#   output:
+#   Normal output:
 #     dist/PackageHub-1.0.3-7-unsigned.ipa
+#
+#   Dev entitlement output:
+#     dist/PackageHub-1.0.3-7-dev-entitlement-unsigned.ipa
 #
 # ==================================================
 
@@ -48,6 +81,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLEAN=false
 CHECK=false
 CLEANUP_BUILD=false
+DEV_ENTITLEMENT_OVERRIDE=false
 
 # --------------------------------------------------
 # Parse arguments
@@ -64,11 +98,20 @@ for arg in "$@"; do
     --cleanup-build)
       CLEANUP_BUILD=true
       ;;
+    --dev-entitlement-override)
+      DEV_ENTITLEMENT_OVERRIDE=true
+      ;;
     *)
       echo "❌ Unknown argument: $arg"
       echo
       echo "Usage:"
-      echo "  $0 [--clean] [--check] [--cleanup-build]"
+      echo "  $0 [--clean] [--check] [--cleanup-build] [--dev-entitlement-override]"
+      echo
+      echo "Examples:"
+      echo "  $0"
+      echo "  $0 --check"
+      echo "  $0 --dev-entitlement-override"
+      echo "  $0 --dev-entitlement-override --clean --check"
       exit 1
       ;;
   esac
@@ -137,9 +180,30 @@ fi
 SAFE_VERSION="${VERSION//+/-}"
 
 OUTPUT_DIR="$PROJECT_ROOT/dist"
-OUTPUT_IPA="$OUTPUT_DIR/PackageHub-${SAFE_VERSION}-unsigned.ipa"
+
+if [[ "$DEV_ENTITLEMENT_OVERRIDE" == true ]]; then
+  OUTPUT_IPA="$OUTPUT_DIR/PackageHub-${SAFE_VERSION}-dev-entitlement-unsigned.ipa"
+else
+  OUTPUT_IPA="$OUTPUT_DIR/PackageHub-${SAFE_VERSION}-unsigned.ipa"
+fi
 
 BUILD_APP="$PROJECT_ROOT/build/ios/iphoneos/Runner.app"
+
+# --------------------------------------------------
+# Flutter build arguments
+# --------------------------------------------------
+
+FLUTTER_BUILD_ARGS=(
+  ios
+  --release
+  --no-codesign
+)
+
+if [[ "$DEV_ENTITLEMENT_OVERRIDE" == true ]]; then
+  FLUTTER_BUILD_ARGS+=(
+    --dart-define=PACKAGEHUB_DEV_ENTITLEMENT_OVERRIDE=true
+  )
+fi
 
 # --------------------------------------------------
 # Temporary directory
@@ -165,7 +229,32 @@ echo "────────────────────────�
 echo "Project : $PROJECT_ROOT"
 echo "Version : $VERSION"
 echo "Output  : $OUTPUT_IPA"
+
+if [[ "$DEV_ENTITLEMENT_OVERRIDE" == true ]]; then
+  echo "Mode    : RELEASE + DEV ENTITLEMENT OVERRIDE"
+else
+  echo "Mode    : RELEASE"
+fi
+
 echo
+
+if [[ "$DEV_ENTITLEMENT_OVERRIDE" == true ]]; then
+  echo "⚠️  DEVELOPMENT ENTITLEMENT OVERRIDE ENABLED"
+  echo
+  echo "   This build allows:"
+  echo
+  echo "       真实 / Free / Pro"
+  echo
+  echo "   entitlement switching."
+  echo
+  echo "   Compile-time flag:"
+  echo
+  echo "       PACKAGEHUB_DEV_ENTITLEMENT_OVERRIDE=true"
+  echo
+  echo "   🚫 Do NOT distribute this build as a production"
+  echo "      App Store build."
+  echo
+fi
 
 # --------------------------------------------------
 # Optional clean
@@ -204,7 +293,16 @@ fi
 
 echo
 echo "🔨 Building unsigned iOS Release..."
-flutter build ios --release --no-codesign
+
+if [[ "$DEV_ENTITLEMENT_OVERRIDE" == true ]]; then
+  echo "   Dev entitlement override: ENABLED"
+else
+  echo "   Dev entitlement override: disabled"
+fi
+
+echo
+
+flutter build "${FLUTTER_BUILD_ARGS[@]}"
 
 # --------------------------------------------------
 # Verify Runner.app
@@ -311,6 +409,22 @@ echo "File    : $OUTPUT_IPA"
 echo "Size    : $IPA_SIZE"
 echo "SHA256  : $IPA_SHA256"
 
+if [[ "$DEV_ENTITLEMENT_OVERRIDE" == true ]]; then
+  echo "Mode    : RELEASE + DEV ENTITLEMENT OVERRIDE"
+  echo
+  echo "⚠️  This IPA contains the development entitlement"
+  echo "   override capability."
+  echo
+  echo "   Expected Subscription UI:"
+  echo
+  echo "       真实 | Free | Pro"
+else
+  echo "Mode    : RELEASE"
+  echo
+  echo "🔒 Development entitlement override is disabled."
+  echo "   Pro access will use real backend entitlement only."
+fi
+
 # --------------------------------------------------
 # Optional build cleanup
 # --------------------------------------------------
@@ -335,4 +449,20 @@ echo "          ↓"
 echo "  全能签"
 echo "          ↓"
 echo "  重签名并安装"
+
+if [[ "$DEV_ENTITLEMENT_OVERRIDE" == true ]]; then
+  echo
+  echo "Then:"
+  echo
+  echo "  PackageHub"
+  echo "      ↓"
+  echo "  账户"
+  echo "      ↓"
+  echo "  订阅与权益"
+  echo "      ↓"
+  echo "  开发权益覆盖"
+  echo "      ↓"
+  echo "  选择 Pro"
+fi
+
 echo
