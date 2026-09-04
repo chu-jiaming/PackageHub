@@ -23,6 +23,9 @@ class StationMapPageState extends State<StationMapPage> {
   final _resolver = const PickupZoneResolver();
   final _mapTransformationController = TransformationController();
   bool _mapTransformInitialized = false;
+  bool _mapCenterUpdateScheduled = false;
+  Size? _mapViewportSize;
+  Rect? _mapBoundaryRect;
   double? _scaleGestureStartScale;
   Offset? _scaleGestureStartSceneFocalPoint;
   Offset? _scaleGestureStartLocalFocalPoint;
@@ -148,9 +151,15 @@ class StationMapPageState extends State<StationMapPage> {
                   horizontal: (constraints.maxWidth - width) / 2,
                   vertical: (constraints.maxHeight - height) / 2,
                 );
-                _initializeMapTransformIfNeeded(
-                  viewport: Size(constraints.maxWidth, constraints.maxHeight),
-                  content: Size(width, height),
+                final viewportSize = Size(
+                  constraints.maxWidth,
+                  constraints.maxHeight,
+                );
+                final contentSize = Size(width, height);
+                _updateMapGeometry(
+                  viewport: viewportSize,
+                  content: contentSize,
+                  boundaryMargin: boundaryMargin,
                 );
                 return SizedBox.expand(
                   key: const Key('station-map-viewport'),
@@ -169,7 +178,11 @@ class StationMapPageState extends State<StationMapPage> {
                       onInteractionEnd: _onMapInteractionEnd,
                       interactionEndFrictionCoefficient: 1e9,
                       constrained: false,
-                      alignment: Alignment.center,
+                      // The controller matrix is calculated in viewport
+                      // coordinates. Keeping the render origin at the top-left
+                      // prevents Transform from adding a second, scale-dependent
+                      // offset around the map's center.
+                      alignment: Alignment.topLeft,
                       boundaryMargin: boundaryMargin,
                       clipBehavior: Clip.hardEdge,
                       child: SizedBox(
@@ -222,17 +235,40 @@ class StationMapPageState extends State<StationMapPage> {
     );
   }
 
-  void _initializeMapTransformIfNeeded({
+  void _updateMapGeometry({
     required Size viewport,
     required Size content,
+    required EdgeInsets boundaryMargin,
   }) {
-    if (_mapTransformInitialized) return;
-    _mapTransformInitialized = true;
+    final boundary = boundaryMargin.inflateRect(Offset.zero & content);
+    final geometryChanged =
+        viewport != _mapViewportSize || boundary != _mapBoundaryRect;
+    _mapViewportSize = viewport;
+    _mapBoundaryRect = boundary;
+
+    if (!_mapTransformInitialized) {
+      _mapTransformInitialized = true;
+      _scheduleMapCenterAtMinimumScale();
+    } else if (geometryChanged) {
+      _scheduleMapCenterAtMinimumScale();
+    }
+  }
+
+  void _scheduleMapCenterAtMinimumScale() {
+    if (_mapCenterUpdateScheduled) return;
+    _mapCenterUpdateScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      _mapCenterUpdateScheduled = false;
+      if (!mounted || _scaleGestureFocalPointLocked) return;
+      final boundary = _mapBoundaryRect;
+      if (boundary == null ||
+          (_mapTransformationController.value.getMaxScaleOnAxis() - 1).abs() >
+              .0001) {
+        return;
+      }
       _mapTransformationController.value = Matrix4.translationValues(
-        (viewport.width - content.width) / 2,
-        (viewport.height - content.height) / 2,
+        -boundary.left,
+        -boundary.top,
         0,
       );
     });
@@ -286,22 +322,52 @@ class StationMapPageState extends State<StationMapPage> {
     final lockedSceneFocalPoint = _scaleGestureStartSceneFocalPoint;
     if (lockedLocalFocalPoint == null || lockedSceneFocalPoint == null) return;
 
+    final unclampedTranslation = Offset(
+      lockedLocalFocalPoint.dx - scale * lockedSceneFocalPoint.dx,
+      lockedLocalFocalPoint.dy - scale * lockedSceneFocalPoint.dy,
+    );
+    final translation = _clampMapTranslation(unclampedTranslation, scale);
     final targetMatrix = Matrix4.identity()
       ..setEntry(0, 0, scale)
       ..setEntry(1, 1, scale)
-      ..setEntry(
-        0,
-        3,
-        lockedLocalFocalPoint.dx - scale * lockedSceneFocalPoint.dx,
-      )
-      ..setEntry(
-        1,
-        3,
-        lockedLocalFocalPoint.dy - scale * lockedSceneFocalPoint.dy,
-      );
+      ..setEntry(0, 3, translation.dx)
+      ..setEntry(1, 3, translation.dy);
     _correctingScaleTransform = true;
     _mapTransformationController.value = targetMatrix;
     _correctingScaleTransform = false;
+  }
+
+  Offset _clampMapTranslation(Offset translation, double scale) {
+    final viewport = _mapViewportSize;
+    final boundary = _mapBoundaryRect;
+    if (viewport == null || boundary == null) return translation;
+
+    double clampAxis({
+      required double value,
+      required double viewportExtent,
+      required double boundaryStart,
+      required double boundaryEnd,
+    }) {
+      final minimum = viewportExtent - scale * boundaryEnd;
+      final maximum = -scale * boundaryStart;
+      if (minimum > maximum) return (minimum + maximum) / 2;
+      return value.clamp(minimum, maximum).toDouble();
+    }
+
+    return Offset(
+      clampAxis(
+        value: translation.dx,
+        viewportExtent: viewport.width,
+        boundaryStart: boundary.left,
+        boundaryEnd: boundary.right,
+      ),
+      clampAxis(
+        value: translation.dy,
+        viewportExtent: viewport.height,
+        boundaryStart: boundary.top,
+        boundaryEnd: boundary.bottom,
+      ),
+    );
   }
 
   void _onMapInteractionEnd(ScaleEndDetails details) {

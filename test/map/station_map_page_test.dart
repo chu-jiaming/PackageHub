@@ -194,6 +194,94 @@ void main() {
     );
   });
 
+  testWidgets('minimum scale settles at center before the pinch ends', (
+    tester,
+  ) async {
+    await pumpMap(tester);
+
+    final viewer = tester.widget<InteractiveViewer>(
+      find.byType(InteractiveViewer),
+    );
+    final controller = viewer.transformationController!;
+    final centeredMatrix = controller.value.clone();
+    final viewportSize = tester.getSize(
+      find.byKey(const Key('station-map-viewport')),
+    );
+    final contentSize = tester.getSize(
+      find.byKey(const Key('station-map-content')),
+    );
+    final expectedCenteredTranslation = Offset(
+      (viewportSize.width - contentSize.width) / 2,
+      (viewportSize.height - contentSize.height) / 2,
+    );
+    expect(
+      centeredMatrix.entry(0, 3),
+      closeTo(expectedCenteredTranslation.dx, .01),
+    );
+    expect(
+      centeredMatrix.entry(1, 3),
+      closeTo(expectedCenteredTranslation.dy, .01),
+    );
+
+    final zoomFirstFinger = await tester.startGesture(
+      const Offset(150, 400),
+      pointer: 11,
+    );
+    final zoomSecondFinger = await tester.startGesture(
+      const Offset(240, 400),
+      pointer: 12,
+    );
+    await tester.pump();
+    await zoomFirstFinger.moveTo(const Offset(110, 400));
+    await zoomSecondFinger.moveTo(const Offset(280, 400));
+    await tester.pump();
+    await zoomFirstFinger.up();
+    await zoomSecondFinger.up();
+    await tester.pumpAndSettle();
+
+    expect(controller.value.getMaxScaleOnAxis(), greaterThan(1));
+
+    // Zoom back out around an off-center focal point. The map must already be
+    // centered when it reaches its minimum scale, rather than snapping there
+    // after the fingers are released.
+    final shrinkFirstFinger = await tester.startGesture(
+      const Offset(210, 420),
+      pointer: 13,
+    );
+    final shrinkSecondFinger = await tester.startGesture(
+      const Offset(350, 420),
+      pointer: 14,
+    );
+    await tester.pump();
+    await shrinkFirstFinger.moveTo(const Offset(270, 420));
+    await shrinkSecondFinger.moveTo(const Offset(290, 420));
+    await tester.pump();
+
+    final minimumMatrixBeforeRelease = controller.value.clone();
+    expect(minimumMatrixBeforeRelease.getMaxScaleOnAxis(), closeTo(1, .001));
+    expect(
+      minimumMatrixBeforeRelease.entry(0, 3),
+      closeTo(centeredMatrix.entry(0, 3), .01),
+    );
+    expect(
+      minimumMatrixBeforeRelease.entry(1, 3),
+      closeTo(centeredMatrix.entry(1, 3), .01),
+    );
+
+    await shrinkFirstFinger.up();
+    await shrinkSecondFinger.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.value.entry(0, 3),
+      closeTo(minimumMatrixBeforeRelease.entry(0, 3), .01),
+    );
+    expect(
+      controller.value.entry(1, 3),
+      closeTo(minimumMatrixBeforeRelease.entry(1, 3), .01),
+    );
+  });
+
   testWidgets('pinch keeps the initial two-finger center as the zoom anchor', (
     tester,
   ) async {
@@ -203,8 +291,11 @@ void main() {
     final viewer = tester.widget<InteractiveViewer>(viewerFinder);
     final controller = viewer.transformationController!;
     final viewerTopLeft = tester.getTopLeft(viewerFinder);
+    final contentFinder = find.byKey(const Key('station-map-content'));
     const globalFocalPoint = Offset(195, 400);
     final initialFocalPoint = globalFocalPoint - viewerTopLeft;
+    final initialSceneOffset =
+        globalFocalPoint - tester.getTopLeft(contentFinder);
     final firstFinger = await tester.startGesture(
       globalFocalPoint - const Offset(45, 0),
       pointer: 5,
@@ -222,6 +313,10 @@ void main() {
     await secondFinger.up();
     await tester.pumpAndSettle();
 
+    final scale = controller.value.getMaxScaleOnAxis();
+    final renderedScenePoint =
+        tester.getTopLeft(contentFinder) + initialSceneOffset * scale;
+
     expect(
       controller.toScene(initialFocalPoint),
       isA<Offset>().having(
@@ -234,5 +329,7 @@ void main() {
       controller.toScene(initialFocalPoint).dy,
       closeTo(initialScenePoint.dy, .01),
     );
+    expect(renderedScenePoint.dx, closeTo(globalFocalPoint.dx, .01));
+    expect(renderedScenePoint.dy, closeTo(globalFocalPoint.dy, .01));
   });
 }
