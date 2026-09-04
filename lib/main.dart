@@ -52,19 +52,32 @@ void main() {
     client: MethodChannelStoreKitClient(),
     accountRepository: account,
   );
-  final subscription = baseUrl.isEmpty ? storeKit : BackendSubscriptionRepository(
-    account: account,
-    api: AccountApiClient(baseUrl),
-    storeKit: MethodChannelStoreKitClient(),
-    verifier: const String.fromEnvironment('PACKAGEHUB_ENTITLEMENT_PUBLIC_KEY').isEmpty
-        ? const RejectingEntitlementTokenVerifier()
-        : Es256EntitlementTokenVerifier(const String.fromEnvironment('PACKAGEHUB_ENTITLEMENT_PUBLIC_KEY')),
+  final subscription = baseUrl.isEmpty
+      ? storeKit
+      : BackendSubscriptionRepository(
+          account: account,
+          api: AccountApiClient(baseUrl),
+          storeKit: MethodChannelStoreKitClient(),
+          verifier:
+              const String.fromEnvironment('PACKAGEHUB_ENTITLEMENT_PUBLIC_KEY')
+                  .isEmpty
+              ? const RejectingEntitlementTokenVerifier()
+              : Es256EntitlementTokenVerifier(
+                  const String.fromEnvironment(
+                    'PACKAGEHUB_ENTITLEMENT_PUBLIC_KEY',
+                  ),
+                ),
+        );
+  final debugOverrideController = DebugSubscriptionOverrideController();
+  final resolvedSubscription = ResolvedSubscriptionRepository(
+    backendSubscriptionRepository: subscription,
+    debugOverrideController: debugOverrideController,
   );
   runApp(
     PackageHubApp(
       repository: repository,
       accountRepository: account,
-      subscriptionRepository: DebugSubscriptionOverrideRepository(subscription),
+      subscriptionRepository: resolvedSubscription,
     ),
   );
 }

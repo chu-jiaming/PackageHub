@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:packagehub/account/account_repository.dart';
 import 'package:packagehub/account/account_user.dart';
@@ -178,11 +179,11 @@ class SubscriptionPage extends StatelessWidget {
                 onPressed: () => subscriptionRepository.restorePurchases(),
                 child: const Text('恢复购买'),
               ),
-              if (subscriptionRepository is DebugSubscriptionOverrideRepository)
+              if (kDebugMode &&
+                  subscriptionRepository is ResolvedSubscriptionRepository)
                 _DebugSubscriptionControls(
                   repository:
-                      subscriptionRepository
-                          as DebugSubscriptionOverrideRepository,
+                      subscriptionRepository as ResolvedSubscriptionRepository,
                 ),
             ],
           ),
@@ -245,7 +246,7 @@ class _PurchaseButtonState extends State<_PurchaseButton> {
 }
 
 class _DebugSubscriptionControls extends StatelessWidget {
-  final DebugSubscriptionOverrideRepository repository;
+  final ResolvedSubscriptionRepository repository;
   const _DebugSubscriptionControls({required this.repository});
   @override
   Widget build(BuildContext context) => Card(
@@ -259,16 +260,22 @@ class _DebugSubscriptionControls extends StatelessWidget {
           const SizedBox(height: 8),
           const Text('开发权益覆盖'),
           const SizedBox(height: 8),
-          CupertinoSlidingSegmentedControl<DebugEntitlementMode>(
-            groupValue: repository.mode,
-            children: const {
-              DebugEntitlementMode.storeKit: Text('StoreKit'),
-              DebugEntitlementMode.free: Text('Free'),
-              DebugEntitlementMode.pro: Text('Pro'),
-            },
-            onValueChanged: (value) {
-              if (value != null) repository.setMode(value);
-            },
+          SizedBox(
+            height: 48,
+            child: CupertinoSlidingSegmentedControl<DebugEntitlementMode>(
+              key: const Key('debugEntitlementSegmentedControl'),
+              groupValue: repository.mode,
+              children: const {
+                DebugEntitlementMode.automatic: Text('真实'),
+                DebugEntitlementMode.free: Text('Free'),
+                DebugEntitlementMode.pro: Text('Pro'),
+              },
+              onValueChanged: (value) {
+                if (value != null) {
+                  repository.debugOverrideController.setOverride(value);
+                }
+              },
+            ),
           ),
           const SizedBox(height: 8),
           const Text('仅开发构建，用于测试 Free / Pro 功能门禁。'),
