@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:packagehub/core/duplicate/tracking_number_normalizer.dart';
 import 'package:packagehub/core/repository/pickup_credential_repository.dart';
+import 'package:packagehub/design_system/tokens/ph_sizes.dart';
 import 'package:packagehub/main.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
@@ -18,6 +19,64 @@ void main() {
       expect(find.text('添加快递截图后，'), findsOneWidget);
       expect(find.text('PackageHub 会自动识别取件信息。'), findsOneWidget);
       expect(find.text('添加截图'), findsOneWidget);
+    });
+
+    testWidgets('keeps normal header actions horizontal at 320 points', (
+      tester,
+    ) async {
+      _setViewport(tester, const Size(320, 800));
+      await _pumpHome(
+        tester,
+        repository: _FakePickupCredentialRepository(
+          initialCredentials: [_credential(id: 1)],
+        ),
+      );
+
+      expect(find.text('批量管理'), findsOneWidget);
+      expect(find.text('PackageHub'), findsOneWidget);
+      expect(find.byKey(const Key('accountAvatarButton')), findsOneWidget);
+      expect(
+        find.byKey(const Key('pickupReminderSettingsButton')),
+        findsOneWidget,
+      );
+      _expectSingleLineAction(
+        tester,
+        button: find.byKey(const Key('enterSelectionModeButton')),
+        label: '批量管理',
+      );
+    });
+
+    testWidgets('keeps selection header actions horizontal at 320 points', (
+      tester,
+    ) async {
+      _setViewport(tester, const Size(320, 800));
+      await _pumpHome(
+        tester,
+        repository: _FakePickupCredentialRepository(
+          initialCredentials: [_credential(id: 1), _credential(id: 2)],
+        ),
+      );
+      await _enterSelectionMode(tester);
+
+      expect(find.text('PackageHub'), findsOneWidget);
+      _expectSingleLineAction(
+        tester,
+        button: find.byKey(const Key('selectAllCredentialsButton')),
+        label: '全选',
+      );
+      _expectSingleLineAction(
+        tester,
+        button: find.byKey(const Key('cancelSelectionModeButton')),
+        label: '取消',
+      );
+
+      await tester.tap(find.byKey(const Key('selectAllCredentialsButton')));
+      await tester.pumpAndSettle();
+      _expectSingleLineAction(
+        tester,
+        button: find.byKey(const Key('selectAllCredentialsButton')),
+        label: '取消全选',
+      );
     });
 
     testWidgets('displays 3 real credentials from repository', (tester) async {
@@ -1955,6 +2014,38 @@ Future<void> _pumpHome(
   );
   await tester.pump();
   await tester.pump();
+}
+
+void _setViewport(WidgetTester tester, Size size) {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+}
+
+void _expectSingleLineAction(
+  WidgetTester tester, {
+  required Finder button,
+  required String label,
+}) {
+  final textFinder = find.descendant(of: button, matching: find.text(label));
+  expect(textFinder, findsOneWidget);
+  final text = tester.widget<Text>(textFinder);
+  expect(text.maxLines, 1);
+  expect(text.softWrap, isFalse);
+  expect(
+    tester.getSize(button).width,
+    greaterThanOrEqualTo(PHSizes.minInteractive),
+  );
+  if (label.length > 2) {
+    expect(tester.getSize(button).width, greaterThan(PHSizes.minInteractive));
+  }
+  expect(
+    tester.getSize(button).height,
+    greaterThanOrEqualTo(PHSizes.minInteractive),
+  );
 }
 
 Future<void> _runImport(WidgetTester tester) async {

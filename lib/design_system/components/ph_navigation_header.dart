@@ -70,7 +70,7 @@ class PHNavigationHeader extends StatelessWidget
               children: [
                 for (var i = 0; i < actions.length; i++) ...[
                   if (i > 0) const SizedBox(width: PHSpacing.xs),
-                  _slot(actions[i]),
+                  _actionSlot(actions[i]),
                 ],
               ],
             ),
@@ -111,6 +111,16 @@ class PHNavigationHeader extends StatelessWidget
       width: PHSizes.minInteractive,
       height: PHSizes.minInteractive,
       child: Center(child: child),
+    );
+  }
+
+  Widget _actionSlot(Widget child) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        minWidth: PHSizes.minInteractive,
+        minHeight: PHSizes.minInteractive,
+      ),
+      child: child,
     );
   }
 }

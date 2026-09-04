@@ -871,12 +871,16 @@ class _HomePageState extends State<HomePage> {
             TextButton(
               key: const Key('selectAllCredentialsButton'),
               onPressed: _isBatchOperating ? null : _selectAllOrClear,
-              child: Text(_areAllCredentialsSelected ? '取消全选' : '全选'),
+              child: Text(
+                _areAllCredentialsSelected ? '取消全选' : '全选',
+                maxLines: 1,
+                softWrap: false,
+              ),
             ),
             TextButton(
               key: const Key('cancelSelectionModeButton'),
               onPressed: _isBatchOperating ? null : _exitSelectionMode,
-              child: const Text('取消'),
+              child: const Text('取消', maxLines: 1, softWrap: false),
             ),
           ] else
             TextButton(
@@ -884,7 +888,7 @@ class _HomePageState extends State<HomePage> {
               onPressed: _credentials.isEmpty || _isLoading
                   ? null
                   : () => _enterSelectionMode(),
-              child: const Text('批量操作'),
+              child: const Text('批量管理', maxLines: 1, softWrap: false),
             ),
         ],
       ),
