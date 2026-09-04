@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:packagehub/design_system/tokens/ph_colors.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_radius.dart';
 import 'package:packagehub/design_system/tokens/ph_sizes.dart';
 
@@ -21,16 +21,15 @@ class PHIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
     final foreground = switch (variant) {
-      PHIconButtonVariant.destructive => PHColors.destructive,
-      _ => PHColors.accent,
+      PHIconButtonVariant.destructive => colors.iconDanger,
+      _ => colors.iconAccent,
     };
     final background = switch (variant) {
       PHIconButtonVariant.plain => CupertinoColors.transparent,
-      PHIconButtonVariant.tinted => PHColors.accent.withValues(alpha: 0.12),
-      PHIconButtonVariant.destructive => PHColors.destructive.withValues(
-        alpha: 0.12,
-      ),
+      PHIconButtonVariant.tinted => colors.bgAccentSubtle,
+      PHIconButtonVariant.destructive => colors.bgDangerSubtle,
     };
 
     return Semantics(
@@ -48,12 +47,12 @@ class PHIconButton extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(PHRadius.md),
           color: background,
-          disabledColor: PHColors.bgSurfaceSecondary,
+          disabledColor: colors.bgDisabled,
           onPressed: onPressed,
           pressedOpacity: 0.55,
           child: IconTheme(
             data: IconThemeData(
-              color: onPressed == null ? PHColors.textTertiary : foreground,
+              color: onPressed == null ? colors.iconDisabled : foreground,
               size: PHSizes.iconMedium,
             ),
             child: icon,

@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:packagehub/design_system/tokens/ph_colors.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_radius.dart';
 import 'package:packagehub/design_system/tokens/ph_sizes.dart';
 import 'package:packagehub/design_system/tokens/ph_spacing.dart';
@@ -29,17 +29,18 @@ class PHButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
     final enabled = onPressed != null && !isLoading;
     final foreground = switch (variant) {
       PHButtonVariant.primary ||
-      PHButtonVariant.destructive => CupertinoColors.white,
-      _ => PHColors.accent,
+      PHButtonVariant.destructive => colors.textInverse,
+      _ => colors.textAccent,
     };
     final background = switch (variant) {
-      PHButtonVariant.primary => PHColors.accent,
-      PHButtonVariant.secondary => PHColors.accent.withValues(alpha: 0.12),
+      PHButtonVariant.primary => colors.bgAccent,
+      PHButtonVariant.secondary => colors.bgAccentSubtle,
       PHButtonVariant.tertiary => CupertinoColors.transparent,
-      PHButtonVariant.destructive => PHColors.destructive,
+      PHButtonVariant.destructive => colors.bgDanger,
     };
     final height = switch (size) {
       PHButtonSize.small => PHSizes.controlSmall,
@@ -47,7 +48,7 @@ class PHButton extends StatelessWidget {
       PHButtonSize.large => PHSizes.controlLarge,
     };
     final textStyle = PHTypography.footnote.copyWith(
-      color: enabled ? foreground : PHColors.textTertiary,
+      color: enabled ? foreground : colors.textDisabled,
       fontWeight: FontWeight.w600,
     );
 
@@ -62,7 +63,7 @@ class PHButton extends StatelessWidget {
           minimumSize: Size(0, height),
           borderRadius: BorderRadius.circular(PHRadius.md),
           color: background,
-          disabledColor: PHColors.bgSurfaceSecondary,
+          disabledColor: colors.bgDisabled,
           onPressed: enabled ? onPressed : null,
           pressedOpacity: 0.55,
           child: isLoading

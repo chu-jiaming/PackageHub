@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:packagehub/design_system/tokens/ph_colors.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_radius.dart';
 import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 import 'package:packagehub/design_system/tokens/ph_typography.dart';
@@ -18,12 +18,20 @@ class PHBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
     final color = switch (variant) {
-      PHBadgeVariant.neutral => PHColors.textSecondary,
-      PHBadgeVariant.accent => PHColors.accent,
-      PHBadgeVariant.success => PHColors.success,
-      PHBadgeVariant.warning => PHColors.warning,
-      PHBadgeVariant.destructive => PHColors.destructive,
+      PHBadgeVariant.neutral => colors.textSecondary,
+      PHBadgeVariant.accent => colors.textAccent,
+      PHBadgeVariant.success => colors.textSuccess,
+      PHBadgeVariant.warning => colors.textWarning,
+      PHBadgeVariant.destructive => colors.textDanger,
+    };
+    final background = switch (variant) {
+      PHBadgeVariant.neutral => colors.bgSurfaceSecondary,
+      PHBadgeVariant.accent => colors.bgAccentSubtle,
+      PHBadgeVariant.success => colors.bgSuccessSubtle,
+      PHBadgeVariant.warning => colors.bgWarningSubtle,
+      PHBadgeVariant.destructive => colors.bgDangerSubtle,
     };
     return Semantics(
       label: label,
@@ -33,7 +41,7 @@ class PHBadge extends StatelessWidget {
           vertical: PHSpacing.xxs,
         ),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
+          color: background,
           borderRadius: BorderRadius.circular(PHRadius.full),
         ),
         child: Text(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:packagehub/design_system/tokens/ph_colors.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_radius.dart';
 import 'package:packagehub/design_system/tokens/ph_sizes.dart';
 import 'package:packagehub/design_system/tokens/ph_spacing.dart';
@@ -36,6 +36,7 @@ class PHPackageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
     final content = Padding(
       padding: const EdgeInsets.all(PHSpacing.md),
       child: Column(
@@ -59,6 +60,7 @@ class PHPackageCard extends StatelessWidget {
                               pickupCode ?? '未识别取件码',
                               maxLines: 1,
                               style: PHTypography.title1.copyWith(
+                                color: colors.textPrimary,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -76,7 +78,9 @@ class PHPackageCard extends StatelessWidget {
                                     : ''),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: PHTypography.caption2,
+                            style: PHTypography.caption2.copyWith(
+                              color: colors.textSecondary,
+                            ),
                           ),
                         ),
                       ],
@@ -84,17 +88,17 @@ class PHPackageCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: PHSpacing.sm),
-                trailingAction ?? _completeAction(),
+                trailingAction ?? _completeAction(colors),
               ],
             ),
           ),
-          const Divider(
+          Divider(
             height: PHSizes.separator,
             thickness: PHSizes.separator,
-            color: PHColors.separatorDefault,
+            color: colors.separatorDefault,
           ),
-          _infoRow('运单号', trackingNumber),
-          _infoRow('位置', location),
+          _infoRow('运单号', trackingNumber, colors),
+          _infoRow('位置', location, colors),
         ],
       ),
     );
@@ -103,8 +107,8 @@ class PHPackageCard extends StatelessWidget {
       container: true,
       child: Material(
         color: state == PHPackageCardState.completed
-            ? PHColors.bgSurfaceSecondary
-            : PHColors.bgSurface,
+            ? colors.bgSurfaceSecondary
+            : colors.bgSurface,
         borderRadius: BorderRadius.circular(PHRadius.lg),
         child: InkWell(
           onTap: onTap,
@@ -118,7 +122,7 @@ class PHPackageCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(PHRadius.lg),
               border: Border.all(
-                color: PHColors.borderDefault,
+                color: colors.borderDefault,
                 width: PHSizes.stroke,
               ),
             ),
@@ -129,7 +133,7 @@ class PHPackageCard extends StatelessWidget {
     );
   }
 
-  Widget _completeAction() {
+  Widget _completeAction(PHColorScheme colors) {
     final enabled = state == PHPackageCardState.active && onComplete != null;
     return Semantics(
       button: enabled,
@@ -143,9 +147,9 @@ class PHPackageCard extends StatelessWidget {
           padding: EdgeInsets.zero,
           style: IconButton.styleFrom(
             backgroundColor: enabled
-                ? PHColors.bgSurfaceSecondary
-                : PHColors.separatorDefault,
-            foregroundColor: PHColors.textPrimary,
+                ? colors.bgSurfaceSecondary
+                : colors.bgDisabled,
+            foregroundColor: colors.iconPrimary,
             shape: const CircleBorder(),
           ),
           icon: const Icon(Icons.check, size: 20),
@@ -155,21 +159,26 @@ class PHPackageCard extends StatelessWidget {
     );
   }
 
-  Widget _infoRow(String label, String? value) {
+  Widget _infoRow(String label, String? value, PHColorScheme colors) {
     return SizedBox(
       height: PHSizes.rowHeight,
       child: Row(
         children: [
           SizedBox(
             width: PHSizes.labelColumn,
-            child: Text(label, style: PHTypography.caption2),
+            child: Text(
+              label,
+              style: PHTypography.caption2.copyWith(
+                color: colors.textSecondary,
+              ),
+            ),
           ),
           Expanded(
             child: Text(
               value ?? '—',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: PHTypography.footnote,
+              style: PHTypography.footnote.copyWith(color: colors.textPrimary),
             ),
           ),
         ],

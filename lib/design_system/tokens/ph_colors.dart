@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 abstract final class PHColors {
+  // Legacy light-mode aliases. New production components should use
+  // PHColorScheme.of(context) so Light and Dark modes stay distinct.
   static const bgSurface = Color(0xFFFFFFFF);
   static const bgSurfaceSecondary = Color(0xFFF9F9FB);
   static const textPrimary = Color(0xFF000000);

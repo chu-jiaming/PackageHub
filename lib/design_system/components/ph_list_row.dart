@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:packagehub/design_system/tokens/ph_colors.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_sizes.dart';
 import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 import 'package:packagehub/design_system/tokens/ph_typography.dart';
@@ -11,6 +11,7 @@ class PHListRow extends StatelessWidget {
   final Widget? trailing;
   final VoidCallback? onTap;
   final bool showChevron;
+  final bool showSeparator;
 
   const PHListRow({
     super.key,
@@ -20,15 +21,17 @@ class PHListRow extends StatelessWidget {
     this.trailing,
     this.onTap,
     this.showChevron = true,
+    this.showSeparator = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
     final chevron = showChevron
-        ? const Icon(
+        ? Icon(
             CupertinoIcons.chevron_right,
             size: PHSizes.iconSmall,
-            color: PHColors.textTertiary,
+            color: colors.iconSecondary,
           )
         : null;
     final content = Padding(
@@ -44,9 +47,19 @@ class PHListRow extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: PHTypography.footnote),
+                Text(
+                  title,
+                  style: PHTypography.footnote.copyWith(
+                    color: colors.textPrimary,
+                  ),
+                ),
                 if (subtitle != null)
-                  Text(subtitle!, style: PHTypography.caption2),
+                  Text(
+                    subtitle!,
+                    style: PHTypography.caption2.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -68,8 +81,10 @@ class PHListRow extends StatelessWidget {
       label: title,
       child: Container(
         constraints: const BoxConstraints(minHeight: PHSizes.minInteractive),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: PHColors.separatorDefault)),
+        decoration: BoxDecoration(
+          border: showSeparator
+              ? Border(bottom: BorderSide(color: colors.separatorDefault))
+              : null,
         ),
         child: CupertinoButton(
           padding: EdgeInsets.zero,

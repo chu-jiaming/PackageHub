@@ -37,6 +37,7 @@ import 'package:packagehub/subscription/storekit_client.dart';
 import 'package:packagehub/subscription/storekit_subscription_repository.dart';
 import 'package:packagehub/subscription/backend_subscription_repository.dart';
 import 'package:packagehub/subscription/debug/debug_subscription_override.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -116,7 +117,8 @@ class PackageHubApp extends StatelessWidget {
             seedColor: const Color(0xFF2563EB),
             brightness: Brightness.light,
           ),
-          scaffoldBackgroundColor: const Color(0xFFF2F2F7),
+          extensions: const [PHColorScheme.light],
+          scaffoldBackgroundColor: PHColorScheme.light.bgCanvas,
           splashFactory: InkSparkle.splashFactory,
         ),
         darkTheme: ThemeData(
@@ -126,7 +128,8 @@ class PackageHubApp extends StatelessWidget {
             seedColor: const Color(0xFF0A84FF),
             brightness: Brightness.dark,
           ),
-          scaffoldBackgroundColor: const Color(0xFF000000),
+          extensions: const [PHColorScheme.dark],
+          scaffoldBackgroundColor: PHColorScheme.dark.bgCanvas,
         ),
         themeMode: ThemeMode.system,
         home: PackageHubShell(
