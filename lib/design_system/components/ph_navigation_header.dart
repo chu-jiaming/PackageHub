@@ -7,7 +7,8 @@ import 'package:packagehub/design_system/tokens/ph_typography.dart';
 enum PHNavigationHeaderStyle { standard, largeTitle }
 
 /// Presentation-only navigation header. Navigation is owned by the caller.
-class PHNavigationHeader extends StatelessWidget implements PreferredSizeWidget {
+class PHNavigationHeader extends StatelessWidget
+    implements PreferredSizeWidget {
   final PHNavigationHeaderStyle style;
   final Widget? leading;
   final String title;
@@ -22,14 +23,14 @@ class PHNavigationHeader extends StatelessWidget implements PreferredSizeWidget 
   });
 
   @override
-  Size get preferredSize => Size.fromHeight(
-    style == PHNavigationHeaderStyle.largeTitle ? 104 : 64,
-  );
+  Size get preferredSize =>
+      Size.fromHeight(style == PHNavigationHeaderStyle.largeTitle ? 104 : 64);
 
   @override
   Widget build(BuildContext context) {
     final colors = PHColorScheme.of(context);
     final isLarge = style == PHNavigationHeaderStyle.largeTitle;
+    final navigationContentHeight = isLarge ? 104.0 : 64.0;
     final titleStyle =
         (isLarge ? PHTypography.largeTitle : PHTypography.bodyEmphasis)
             .copyWith(color: colors.textPrimary);
@@ -83,14 +84,23 @@ class PHNavigationHeader extends StatelessWidget implements PreferredSizeWidget 
       container: true,
       header: true,
       label: title,
-      child: SizedBox(
-        height: isLarge ? 104 : 64,
-        child: Container(
-          decoration: BoxDecoration(
-            color: colors.bgSurface,
-            border: Border(bottom: BorderSide(color: colors.separatorDefault)),
+      child: ColoredBox(
+        color: colors.bgSurface,
+        child: SafeArea(
+          top: true,
+          bottom: false,
+          child: SizedBox(
+            height: navigationContentHeight,
+            child: Container(
+              decoration: BoxDecoration(
+                color: colors.bgSurface,
+                border: Border(
+                  bottom: BorderSide(color: colors.separatorDefault),
+                ),
+              ),
+              child: Align(alignment: Alignment.bottomCenter, child: header),
+            ),
           ),
-          child: Align(alignment: Alignment.bottomCenter, child: header),
         ),
       ),
     );

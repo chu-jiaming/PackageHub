@@ -37,6 +37,80 @@ void main() {
     expect(tester.getSize(find.byType(PHNavigationHeader)).height, 64);
   });
 
+  testWidgets('navigation header consumes a large top system inset', (
+    tester,
+  ) async {
+    const leadingKey = Key('safeAreaHeaderLeading');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(padding: EdgeInsets.only(top: 59)),
+          child: Scaffold(
+            appBar: const PHNavigationHeader(
+              title: '确认取件信息',
+              leading: SizedBox(key: leadingKey, width: 44, height: 44),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getTopLeft(find.byKey(leadingKey)).dy,
+      greaterThanOrEqualTo(59),
+    );
+  });
+
+  testWidgets('navigation header adapts to a smaller inset without doubling', (
+    tester,
+  ) async {
+    const leadingKey = Key('smallInsetHeaderLeading');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(padding: EdgeInsets.only(top: 20)),
+          child: Scaffold(
+            appBar: const PHNavigationHeader(
+              title: '设置',
+              leading: SizedBox(key: leadingKey, width: 44, height: 44),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final top = tester.getTopLeft(find.byKey(leadingKey)).dy;
+    expect(top, greaterThanOrEqualTo(20));
+    expect(top, lessThan(40));
+  });
+
+  testWidgets('navigation header does not double inset a safe area parent', (
+    tester,
+  ) async {
+    const leadingKey = Key('nestedSafeAreaHeaderLeading');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(padding: EdgeInsets.only(top: 20)),
+          child: Scaffold(
+            body: SafeArea(
+              top: true,
+              bottom: false,
+              child: const PHNavigationHeader(
+                title: '设置',
+                leading: SizedBox(key: leadingKey, width: 44, height: 44),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final top = tester.getTopLeft(find.byKey(leadingKey)).dy;
+    expect(top, greaterThanOrEqualTo(20));
+    expect(top, lessThan(40));
+  });
+
   testWidgets('grouped section and list row can hide the last separator', (
     tester,
   ) async {
