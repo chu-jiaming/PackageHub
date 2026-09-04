@@ -1,0 +1,1 @@
+enum ProFeature { unlimitedActiveCredentials, batchManagement }
