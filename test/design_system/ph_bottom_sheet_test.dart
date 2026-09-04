@@ -46,6 +46,27 @@ void main() {
       material.borderRadius,
       const BorderRadius.vertical(top: Radius.circular(PHRadius.xl)),
     );
+    expect(
+      find.descendant(
+        of: find.byType(PHBottomSheet),
+        matching: find.byType(Flexible),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(PHBottomSheet),
+        matching: find.byType(Expanded),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(PHBottomSheet),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('uses the semantic dark surface color', (tester) async {

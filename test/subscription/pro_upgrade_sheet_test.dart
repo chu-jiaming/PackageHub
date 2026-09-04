@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:packagehub/design_system/components/ph_bottom_sheet.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 import 'package:packagehub/subscription/mock_subscription_repository.dart';
 import 'package:packagehub/subscription/pro_upgrade_sheet.dart';
 
@@ -46,7 +47,9 @@ void main() {
       find.byKey(const Key('proUpsellSecondaryButton')),
     );
     expect(sheet.height, lessThan(420));
-    expect(sheet.bottom - secondary.bottom, lessThan(48));
+    final bottomGap = sheet.bottom - secondary.bottom;
+    expect(bottomGap, closeTo(PHSpacing.lg, 0.01));
+    expect(bottomGap, lessThan(80));
 
     await tester.tap(find.byKey(const Key('proUpsellSecondaryButton')));
     await tester.pumpAndSettle();
