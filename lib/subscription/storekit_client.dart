@@ -82,6 +82,10 @@ class MethodChannelStoreKitClient implements StoreKitClient {
         'STOREKIT_UNAVAILABLE' => StorePurchaseError.storeKitUnavailable,
         _ => StorePurchaseError.unknown,
       });
+    } on MissingPluginException {
+      return const StorePurchaseResult.failure(
+        StorePurchaseError.storeKitUnavailable,
+      );
     }
   }
 
@@ -105,5 +109,11 @@ class MethodChannelStoreKitClient implements StoreKitClient {
   }
 
   @override
-  Future<void> restorePurchases() => _method.invokeMethod('restorePurchases');
+  Future<void> restorePurchases() async {
+    try {
+      await _method.invokeMethod('restorePurchases');
+    } on MissingPluginException {
+      // Non-iOS platforms have no StoreKit implementation.
+    }
+  }
 }
