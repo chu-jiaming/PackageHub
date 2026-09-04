@@ -11,6 +11,7 @@ import 'package:packagehub/design_system/components/ph_package_card.dart';
 import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_sizes.dart';
 import 'package:packagehub/design_system/tokens/ph_spacing.dart';
+import 'package:packagehub/design_system/tokens/ph_motion.dart';
 import 'package:packagehub/main.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
@@ -101,6 +102,72 @@ void main() {
         button: find.byKey(const Key('selectAllCredentialsButton')),
         label: '取消全选',
       );
+    });
+
+    testWidgets('selection transition keeps title and avatar geometry stable', (
+      tester,
+    ) async {
+      _setViewport(tester, const Size(390, 844));
+      await _pumpHome(
+        tester,
+        repository: _FakePickupCredentialRepository(
+          initialCredentials: [_credential(id: 1)],
+        ),
+      );
+
+      final titleBefore = tester.getRect(find.text('PackageHub'));
+      final avatarBefore = tester.getRect(
+        find.byKey(const Key('accountAvatarButton')),
+      );
+      final fabBefore = tester.getRect(
+        find.byKey(const Key('addScreenshotButton')),
+      );
+
+      await tester.tap(find.byKey(const Key('enterSelectionModeButton')));
+      await tester.pump(PHMotion.standard ~/ 2);
+
+      final fabMid = tester.getRect(
+        find.byKey(const Key('addScreenshotButton')),
+      );
+      expect(
+        (fabMid.center.dy - fabBefore.center.dy).abs(),
+        lessThanOrEqualTo(8),
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpAndSettle();
+      final titleAfter = tester.getRect(find.text('PackageHub'));
+      final avatarAfter = tester.getRect(
+        find.byKey(const Key('accountAvatarButton')),
+      );
+      expect((titleAfter.left - titleBefore.left).abs(), lessThanOrEqualTo(1));
+      expect((titleAfter.top - titleBefore.top).abs(), lessThanOrEqualTo(1));
+      expect(
+        (avatarAfter.left - avatarBefore.left).abs(),
+        lessThanOrEqualTo(1),
+      );
+      expect((avatarAfter.top - avatarBefore.top).abs(), lessThanOrEqualTo(1));
+    });
+
+    testWidgets('selection transition stays within narrow widths', (
+      tester,
+    ) async {
+      for (final width in [320.0, 375.0, 390.0]) {
+        _setViewport(tester, Size(width, 844));
+        await _pumpHome(
+          tester,
+          repository: _FakePickupCredentialRepository(
+            initialCredentials: [_credential(id: 1)],
+          ),
+        );
+        await tester.tap(find.byKey(const Key('enterSelectionModeButton')));
+        await tester.pump(PHMotion.standard ~/ 2);
+        expect(tester.takeException(), isNull);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byKey(const Key('cancelSelectionModeButton')));
+        await tester.pumpAndSettle();
+      }
     });
 
     testWidgets('displays 3 real credentials from repository', (tester) async {

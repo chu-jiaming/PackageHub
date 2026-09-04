@@ -48,6 +48,7 @@ import 'package:packagehub/design_system/components/ph_navigation_header.dart';
 import 'package:packagehub/design_system/components/ph_section_header.dart';
 import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_spacing.dart';
+import 'package:packagehub/design_system/tokens/ph_motion.dart';
 import 'package:packagehub/design_system/tokens/ph_typography.dart';
 
 void main() {
@@ -848,59 +849,130 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final motionDuration = PHMotion.duration(context);
     return Scaffold(
       appBar: PHNavigationHeader(
         title: 'PackageHub',
-        leading: !_isSelectionMode
-            ? PHIconButton(
-                key: const Key('accountAvatarButton'),
-                icon: const Icon(Icons.account_circle, size: 34),
-                semanticsLabel: '账户',
-                onPressed: widget.onAccountTap,
-              )
-            : null,
+        leading: IgnorePointer(
+          ignoring: _isSelectionMode,
+          child: AnimatedOpacity(
+            opacity: 1,
+            duration: motionDuration,
+            child: PHIconButton(
+              key: const Key('accountAvatarButton'),
+              icon: const Icon(Icons.account_circle, size: 34),
+              semanticsLabel: '账户',
+              onPressed: widget.onAccountTap,
+            ),
+          ),
+        ),
         actions: [
-          if (!_isSelectionMode)
-            PHIconButton(
-              key: const Key('pickupReminderSettingsButton'),
-              icon: const Icon(Icons.notifications_outlined),
-              semanticsLabel: '取件提醒设置',
-              onPressed: _openReminderSettings,
-            ),
-          if (_isSelectionMode) ...[
-            TextButton(
-              key: const Key('selectAllCredentialsButton'),
-              onPressed: _isBatchOperating ? null : _selectAllOrClear,
-              child: Text(
-                _areAllCredentialsSelected ? '取消全选' : '全选',
-                maxLines: 1,
-                softWrap: false,
-              ),
-            ),
-            TextButton(
-              key: const Key('cancelSelectionModeButton'),
-              onPressed: _isBatchOperating ? null : _exitSelectionMode,
-              child: const Text('取消', maxLines: 1, softWrap: false),
-            ),
-          ] else
-            TextButton(
-              key: const Key('enterSelectionModeButton'),
-              onPressed: _credentials.isEmpty || _isLoading
-                  ? null
-                  : () => _enterSelectionMode(),
-              child: const Text('批量管理', maxLines: 1, softWrap: false),
-            ),
+          _HomeHeaderActionSlot(
+            key: const Key('homeHeaderActionSlotA'),
+            width: 68,
+            duration: motionDuration,
+            child: _isSelectionMode
+                ? TextButton(
+                    key: const Key('selectAllCredentialsButton'),
+                    onPressed: _isBatchOperating ? null : _selectAllOrClear,
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    child: Text(
+                      _areAllCredentialsSelected ? '取消全选' : '全选',
+                      maxLines: 1,
+                      softWrap: false,
+                    ),
+                  )
+                : PHIconButton(
+                    key: const Key('pickupReminderSettingsButton'),
+                    icon: const Icon(Icons.notifications_outlined),
+                    semanticsLabel: '取件提醒设置',
+                    onPressed: _openReminderSettings,
+                  ),
+          ),
+          _HomeHeaderActionSlot(
+            key: const Key('homeHeaderActionSlotB'),
+            width: 68,
+            duration: motionDuration,
+            child: _isSelectionMode
+                ? TextButton(
+                    key: const Key('cancelSelectionModeButton'),
+                    onPressed: _isBatchOperating ? null : _exitSelectionMode,
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    child: const Text('取消', maxLines: 1, softWrap: false),
+                  )
+                : TextButton(
+                    key: const Key('enterSelectionModeButton'),
+                    onPressed: _credentials.isEmpty || _isLoading
+                        ? null
+                        : () => _enterSelectionMode(),
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    child: const Text('批量管理', maxLines: 1, softWrap: false),
+                  ),
+          ),
         ],
       ),
-      body: SafeArea(child: _buildBody()),
-      bottomNavigationBar: _isSelectionMode ? _buildBatchActionBar() : null,
-      floatingActionButton: _isSelectionMode
-          ? null
-          : PHButton(
-              leading: const Icon(Icons.add_photo_alternate_outlined),
-              onPressed: _isSaving ? null : _pickScreenshot,
-              label: '添加截图',
+      body: SafeArea(
+        child: Stack(
+          children: [
+            AnimatedPadding(
+              duration: motionDuration,
+              curve: PHMotion.standardCurve,
+              padding: EdgeInsets.only(bottom: _isSelectionMode ? 132 : 0),
+              child: _buildBody(),
             ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AnimatedSwitcher(
+                duration: motionDuration,
+                reverseDuration: motionDuration,
+                switchInCurve: PHMotion.standardCurve,
+                switchOutCurve: PHMotion.reverseCurve,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, .12),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: _isSelectionMode
+                    ? KeyedSubtree(
+                        key: const ValueKey('batchActionBar'),
+                        child: _buildBatchActionBar(),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+            Positioned(
+              right: PHSpacing.md,
+              bottom: PHSpacing.md,
+              child: IgnorePointer(
+                ignoring: _isSelectionMode,
+                child: AnimatedScale(
+                  scale: _isSelectionMode ? .9 : 1,
+                  duration: motionDuration,
+                  curve: PHMotion.standardCurve,
+                  child: AnimatedOpacity(
+                    opacity: _isSelectionMode ? 0 : 1,
+                    duration: motionDuration,
+                    curve: PHMotion.standardCurve,
+                    child: PHButton(
+                      key: const Key('addScreenshotButton'),
+                      leading: const Icon(Icons.add_photo_alternate_outlined),
+                      onPressed: _isSaving ? null : _pickScreenshot,
+                      label: '添加截图',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1010,17 +1082,26 @@ class _HomePageState extends State<HomePage> {
           _isSelectionMode ? PHSpacing.lg : 96,
         ),
         children: [
-          if (_isSelectionMode)
-            Padding(
-              padding: const EdgeInsets.only(bottom: PHSpacing.sm),
-              child: Text(
-                _selectionCountText,
-                key: const Key('selectedCredentialCount'),
-                style: PHTypography.bodyEmphasis.copyWith(
-                  color: PHColorScheme.of(context).textPrimary,
-                ),
-              ),
+          AnimatedSize(
+            duration: PHMotion.duration(context),
+            curve: PHMotion.standardCurve,
+            child: AnimatedOpacity(
+              opacity: _isSelectionMode ? 1 : 0,
+              duration: PHMotion.duration(context),
+              child: _isSelectionMode
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: PHSpacing.sm),
+                      child: Text(
+                        _selectionCountText,
+                        key: const Key('selectedCredentialCount'),
+                        style: PHTypography.bodyEmphasis.copyWith(
+                          color: PHColorScheme.of(context).textPrimary,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
+          ),
           _buildCredentialSection('待取件', pendingCredentials),
           _buildCredentialSection('未判断', unknownCredentials),
           _buildCredentialSection('已取件', pickedUpCredentials),
@@ -1138,4 +1219,38 @@ class _HomePageState extends State<HomePage> {
 
 Widget _defaultImportPageBuilder(List<String> imagePaths) {
   return BatchImportPage(imagePaths: imagePaths);
+}
+
+class _HomeHeaderActionSlot extends StatelessWidget {
+  final double width;
+  final Duration duration;
+  final Widget child;
+
+  const _HomeHeaderActionSlot({
+    super.key,
+    required this.width,
+    required this.duration,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: AnimatedSwitcher(
+        duration: duration,
+        reverseDuration: duration,
+        switchInCurve: PHMotion.standardCurve,
+        switchOutCurve: PHMotion.reverseCurve,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: .96, end: 1).animate(animation),
+            child: child,
+          ),
+        ),
+        child: KeyedSubtree(key: ValueKey<Key?>(child.key), child: child),
+      ),
+    );
+  }
 }
