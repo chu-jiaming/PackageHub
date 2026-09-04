@@ -55,7 +55,7 @@ void main() {
       expect(find.text('极兔速递 · 1'), findsOneWidget);
       expect(find.text('Z5-2-1350'), findsOneWidget);
       expect(find.text('JT5519167631350'), findsOneWidget);
-      expect(find.text('待取件'), findsWidgets);
+      expect(find.text('待取件'), findsNothing);
     });
 
     testWidgets('does not show sourcePlatform as primary home text', (

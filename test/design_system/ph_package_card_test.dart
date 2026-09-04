@@ -45,6 +45,31 @@ void main() {
     expect(find.text('已取件'), findsOneWidget);
   });
 
+  testWidgets('long pickup code remains fully visible on a narrow card', (
+    tester,
+  ) async {
+    const code = 'JT-2026-09-04-1234567890';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            child: PHPackageCard(
+              state: PHPackageCardState.active,
+              pickupCode: code,
+              trackingNumber: null,
+              location: null,
+              onComplete: null,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text(code), findsOneWidget);
+    expect(tester.getSize(find.byType(FittedBox)).width, lessThan(260));
+  });
+
   testWidgets('nullable tracking and location render safely', (tester) async {
     await tester.pumpWidget(
       _app(

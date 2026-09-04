@@ -52,12 +52,15 @@ class PHPackageCard extends StatelessWidget {
                       Flexible(
                         child: Semantics(
                           label: '取件码 ${pickupCode ?? '未识别取件码'}',
-                          child: Text(
-                            pickupCode ?? '未识别取件码',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: PHTypography.title1.copyWith(
-                              fontWeight: FontWeight.w700,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              pickupCode ?? '未识别取件码',
+                              maxLines: 1,
+                              style: PHTypography.title1.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),

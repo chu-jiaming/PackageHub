@@ -98,7 +98,9 @@ class _CredentialCardContent extends StatelessWidget {
       pickupCode: credential.pickupCode,
       trackingNumber: credential.trackingNumber,
       location: null,
-      statusLabel: credential.status.displayName,
+      statusLabel: completed || credential.status == PickupStatus.unknown
+          ? credential.status.displayName
+          : null,
       onComplete: !isSelectionMode && !isUpdating ? onMarkPickedUp : null,
       completeActionKey: Key('credentialLifecycleButton-${credential.id}'),
       cardKey: Key('credentialCard-${credential.id}'),
