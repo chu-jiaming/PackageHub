@@ -38,6 +38,7 @@ import 'package:packagehub/subscription/storekit_subscription_repository.dart';
 import 'package:packagehub/subscription/debug/debug_subscription_override.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   final database = PackageHubDatabase.instance;
   final repository = PickupCredentialRepository(database);
 
