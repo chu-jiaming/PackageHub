@@ -94,6 +94,7 @@ class _AccountHubState extends State<AccountHub> {
                           SubscriptionPage(
                             subscriptionRepository:
                                 widget.subscriptionRepository,
+                            accountRepository: widget.accountRepository,
                           ),
                         ),
                         onDevices: () => _open(

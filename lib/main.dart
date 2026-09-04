@@ -28,10 +28,14 @@ import 'package:packagehub/account/account_api_client.dart';
 import 'package:packagehub/account/real_account_repository.dart';
 import 'package:packagehub/subscription/mock_subscription_repository.dart';
 import 'package:packagehub/subscription/subscription_repository.dart';
+import 'package:packagehub/subscription/subscription_entitlement.dart';
 import 'package:packagehub/subscription/entitlement_pro_feature_access.dart';
 import 'package:packagehub/subscription/pro_feature.dart';
 import 'package:packagehub/subscription/pro_feature_access.dart';
 import 'package:packagehub/subscription/pro_upgrade_sheet.dart';
+import 'package:packagehub/subscription/storekit_client.dart';
+import 'package:packagehub/subscription/storekit_subscription_repository.dart';
+import 'package:packagehub/subscription/debug/debug_subscription_override.dart';
 
 void main() {
   final database = PackageHubDatabase.instance;
@@ -42,7 +46,17 @@ void main() {
     api: baseUrl.isEmpty ? null : AccountApiClient(baseUrl),
   );
   account.restoreSession();
-  runApp(PackageHubApp(repository: repository, accountRepository: account));
+  final storeKit = StoreKitSubscriptionRepository(
+    client: MethodChannelStoreKitClient(),
+    accountRepository: account,
+  );
+  runApp(
+    PackageHubApp(
+      repository: repository,
+      accountRepository: account,
+      subscriptionRepository: DebugSubscriptionOverrideRepository(storeKit),
+    ),
+  );
 }
 
 typedef ImagePathPicker = Future<List<String>> Function();
@@ -67,33 +81,37 @@ class PackageHubApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'PackageHub',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2563EB),
-          brightness: Brightness.light,
+    return StreamBuilder<SubscriptionEntitlement>(
+      stream: subscriptionRepository.changes,
+      initialData: subscriptionRepository.current,
+      builder: (context, _) => MaterialApp(
+        title: 'PackageHub',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF2563EB),
+            brightness: Brightness.light,
+          ),
+          scaffoldBackgroundColor: const Color(0xFFF2F2F7),
+          splashFactory: InkSparkle.splashFactory,
         ),
-        scaffoldBackgroundColor: const Color(0xFFF2F2F7),
-        splashFactory: InkSparkle.splashFactory,
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0A84FF),
+        darkTheme: ThemeData(
+          useMaterial3: true,
           brightness: Brightness.dark,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF0A84FF),
+            brightness: Brightness.dark,
+          ),
+          scaffoldBackgroundColor: const Color(0xFF000000),
         ),
-        scaffoldBackgroundColor: const Color(0xFF000000),
-      ),
-      themeMode: ThemeMode.system,
-      home: PackageHubShell(
-        repository: repository,
-        accountRepository: accountRepository,
-        subscriptionRepository: subscriptionRepository,
-        proFeatureAccess: EntitlementProFeatureAccess(subscriptionRepository),
+        themeMode: ThemeMode.system,
+        home: PackageHubShell(
+          repository: repository,
+          accountRepository: accountRepository,
+          subscriptionRepository: subscriptionRepository,
+          proFeatureAccess: EntitlementProFeatureAccess(subscriptionRepository),
+        ),
       ),
     );
   }

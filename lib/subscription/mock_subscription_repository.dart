@@ -2,7 +2,7 @@ import 'subscription_entitlement.dart';
 import 'subscription_repository.dart';
 import 'subscription_state.dart';
 
-class MockSubscriptionRepository implements SubscriptionRepository {
+class MockSubscriptionRepository extends SubscriptionRepository {
   @override
   final SubscriptionEntitlement current;
 

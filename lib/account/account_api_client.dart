@@ -22,6 +22,11 @@ class AccountApiException implements Exception {
   const AccountApiException(this.status, this.code);
 }
 
+class StoreKitContext {
+  final String appAccountToken;
+  const StoreKitContext(this.appAccountToken);
+}
+
 class AccountApiClient {
   final String baseUrl;
   final http.Client client;
@@ -111,6 +116,17 @@ class AccountApiClient {
           ),
         )
         .toList();
+  }
+
+  Future<StoreKitContext> storeKitContext(String accessToken) async {
+    final r = await client.get(
+      _uri('/v1/me/storekit-context'),
+      headers: {'authorization': 'Bearer $accessToken'},
+    );
+    if (r.statusCode >= 400) {
+      throw AccountApiException(r.statusCode, 'storekit_context_failed');
+    }
+    return StoreKitContext((jsonDecode(r.body)['appAccountToken'] as String));
   }
 
   AccountSession _session(http.Response r) {

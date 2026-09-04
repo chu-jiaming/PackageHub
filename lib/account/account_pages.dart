@@ -5,6 +5,9 @@ import 'package:packagehub/account/account_user.dart';
 import 'package:packagehub/account/apple_sign_in_client.dart';
 import 'package:packagehub/subscription/subscription_presentation.dart';
 import 'package:packagehub/subscription/subscription_repository.dart';
+import 'package:packagehub/subscription/subscription_entitlement.dart';
+import 'package:packagehub/subscription/storekit_models.dart';
+import 'package:packagehub/subscription/debug/debug_subscription_override.dart';
 
 void showPhaseOneNotice(BuildContext context, String message) {
   showCupertinoDialog<void>(
@@ -117,53 +120,162 @@ class _AccountPageState extends State<AccountPage> {
 
 class SubscriptionPage extends StatelessWidget {
   final SubscriptionRepository subscriptionRepository;
-  const SubscriptionPage({super.key, required this.subscriptionRepository});
+  final AccountRepository? accountRepository;
+  const SubscriptionPage({
+    super.key,
+    required this.subscriptionRepository,
+    this.accountRepository,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final entitlement = subscriptionRepository.current;
-    final isPro = entitlement.isPro;
-    return Scaffold(
-      appBar: AppBar(title: const Text('订阅与权益')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          _SectionCard(
-            title: SubscriptionPresentation.title(entitlement),
-            subtitle: SubscriptionPresentation.subtitle(entitlement),
-            child: isPro
-                ? Text(SubscriptionPresentation.date(entitlement.expiresAt))
-                : const Text('解锁未来持续服务能力。'),
+    return StreamBuilder<SubscriptionEntitlement>(
+      stream: subscriptionRepository.changes,
+      initialData: subscriptionRepository.current,
+      builder: (context, snapshot) {
+        final entitlement = snapshot.data ?? subscriptionRepository.current;
+        final isPro = entitlement.isPro;
+        return Scaffold(
+          appBar: AppBar(title: const Text('订阅与权益')),
+          body: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              _SectionCard(
+                title: SubscriptionPresentation.title(entitlement),
+                subtitle: SubscriptionPresentation.subtitle(entitlement),
+                child: isPro
+                    ? Text(SubscriptionPresentation.date(entitlement.expiresAt))
+                    : const Text('解锁未来持续服务能力。'),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                isPro ? '当前方案' : 'Pro 计划将包含',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              for (final item in const [
+                '无限待取件凭证',
+                '批量标记已取件',
+                '批量删除',
+                '更多高级管理能力',
+                '后续 Pro 功能',
+              ])
+                ListTile(
+                  leading: const Icon(Icons.check_circle_outline),
+                  title: Text(item),
+                ),
+              const SizedBox(height: 16),
+              if (!isPro && accountRepository?.current.isSignedIn == false)
+                FilledButton(
+                  onPressed: accountRepository == null
+                      ? null
+                      : () => accountRepository!.signInWithApple(),
+                  child: const Text('使用 Apple 登录以订阅'),
+                )
+              else if (!isPro)
+                _PurchaseButton(repository: subscriptionRepository),
+              OutlinedButton(
+                onPressed: () => subscriptionRepository.restorePurchases(),
+                child: const Text('恢复购买'),
+              ),
+              if (subscriptionRepository is DebugSubscriptionOverrideRepository)
+                _DebugSubscriptionControls(
+                  repository:
+                      subscriptionRepository
+                          as DebugSubscriptionOverrideRepository,
+                ),
+            ],
           ),
-          const SizedBox(height: 24),
-          Text(
-            isPro ? '当前方案' : 'Pro 计划将包含',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          for (final item in const [
-            '无限待取件凭证',
-            '批量标记已取件',
-            '批量删除',
-            '更多高级管理能力',
-            '后续 Pro 功能',
-          ])
-            ListTile(
-              leading: const Icon(Icons.check_circle_outline),
-              title: Text(item),
-            ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: () => showPhaseOneNotice(
-              context,
-              isPro ? '订阅管理将在订阅系统接入后开放。' : '订阅将在订阅系统接入后开放。',
-            ),
-            child: Text(isPro ? '管理订阅' : '了解 PackageHub Pro'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
+}
+
+class _PurchaseButton extends StatefulWidget {
+  final SubscriptionRepository repository;
+  const _PurchaseButton({required this.repository});
+  @override
+  State<_PurchaseButton> createState() => _PurchaseButtonState();
+}
+
+class _PurchaseButtonState extends State<_PurchaseButton> {
+  StoreProduct? _product;
+  bool _busy = false;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final p = await widget.repository.loadProProduct();
+    if (mounted) setState(() => _product = p);
+  }
+
+  Future<void> _buy() async {
+    setState(() => _busy = true);
+    final outcome = await widget.repository.purchasePro();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (outcome.status == StorePurchaseStatus.pending) {
+      showPhaseOneNotice(context, '购买正在等待确认');
+    }
+    if (outcome.error != null) {
+      showPhaseOneNotice(context, switch (outcome.error!) {
+        StorePurchaseError.accountTokenMismatch => '此订阅与其他 PackageHub 账号关联',
+        StorePurchaseError.unboundPurchase => '无法绑定此购买，请联系客服',
+        StorePurchaseError.verificationFailed => '无法验证购买，请稍后重试',
+        StorePurchaseError.productUnavailable => '暂时无法加载订阅信息',
+        StorePurchaseError.accountRequired => '请先使用 Apple 登录',
+        _ => '暂时无法完成购买，请稍后重试',
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => FilledButton(
+    onPressed: _busy || _product == null ? null : _buy,
+    child: Text(
+      _product == null
+          ? '暂时无法加载订阅信息'
+          : '升级到 ${_product!.displayName} · ${_product!.displayPrice}',
+    ),
+  );
+}
+
+class _DebugSubscriptionControls extends StatelessWidget {
+  final DebugSubscriptionOverrideRepository repository;
+  const _DebugSubscriptionControls({required this.repository});
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(top: 24),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('开发工具'),
+          const SizedBox(height: 8),
+          const Text('开发权益覆盖'),
+          const SizedBox(height: 8),
+          CupertinoSlidingSegmentedControl<DebugEntitlementMode>(
+            groupValue: repository.mode,
+            children: const {
+              DebugEntitlementMode.storeKit: Text('StoreKit'),
+              DebugEntitlementMode.free: Text('Free'),
+              DebugEntitlementMode.pro: Text('Pro'),
+            },
+            onValueChanged: (value) {
+              if (value != null) repository.setMode(value);
+            },
+          ),
+          const SizedBox(height: 8),
+          const Text('仅开发构建，用于测试 Free / Pro 功能门禁。'),
+        ],
+      ),
+    ),
+  );
 }
 
 class DataPrivacyPage extends StatelessWidget {

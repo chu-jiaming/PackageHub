@@ -22,6 +22,7 @@ export function createApp(service?: AuthService) {
   app.post('/v1/auth/refresh', async (req, reply) => { try { return await auth.refresh((req.body as any).refreshToken); } catch (_) { return reply.code(401).send({ error: 'REFRESH_INVALID' }); } });
   app.post('/v1/auth/logout', async (req, reply) => { try { await auth.logout(req.headers.authorization); return reply.code(204).send(); } catch (_) { return reply.code(401).send({ error: 'UNAUTHORIZED' }); } });
   app.get('/v1/me', async (req, reply) => { try { const u = await auth.authenticate(req.headers.authorization); return { id: u.id, displayName: u.display_name, email: u.email }; } catch (e) { return reply.code(401).send({ error: e instanceof Error && e.message === 'ACCOUNT_NOT_FOUND' ? 'ACCOUNT_NOT_FOUND' : 'UNAUTHORIZED' }); } });
+  app.get('/v1/me/storekit-context', async (req, reply) => { try { return await auth.storeKitContext(req.headers.authorization); } catch (_) { return reply.code(401).send({ error: 'UNAUTHORIZED' }); } });
   app.get('/v1/me/devices', async (req, reply) => { try { return { devices: await auth.devicesFor(req.headers.authorization) }; } catch (_) { return reply.code(401).send({ error: 'UNAUTHORIZED' }); } });
   app.delete('/v1/me', async (req, reply) => { try { await auth.delete(req.headers.authorization); return reply.code(204).send(); } catch (e) { return reply.code(409).send({ error: errorCode(e) }); } });
   return app;

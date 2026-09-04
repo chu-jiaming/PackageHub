@@ -10,4 +10,5 @@ abstract class AccountRepository {
   Future<void> signOut() async {}
   Future<void> deleteAccount() async => throw UnimplementedError();
   Future<List<AccountDevice>> loadDevices() async => <AccountDevice>[];
+  Future<String?> storeKitAppAccountToken() async => null;
 }

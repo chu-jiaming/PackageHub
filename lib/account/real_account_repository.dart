@@ -113,4 +113,10 @@ class RealAccountRepository implements AccountRepository {
     if (api == null || _access == null) return [];
     return api!.devices(_access!);
   }
+
+  @override
+  Future<String?> storeKitAppAccountToken() async {
+    if (api == null || _access == null || !_state.isSignedIn) return null;
+    return (await api!.storeKitContext(_access!)).appAccountToken;
+  }
 }

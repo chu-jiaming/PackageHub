@@ -20,4 +20,7 @@ class MockAccountRepository implements AccountRepository {
   Future<void> deleteAccount() async => throw UnimplementedError();
   @override
   Future<List<AccountDevice>> loadDevices() async => <AccountDevice>[];
+
+  @override
+  Future<String?> storeKitAppAccountToken() async => null;
 }
