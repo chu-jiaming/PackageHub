@@ -73,15 +73,32 @@ final class StoreKitService: NSObject, FlutterStreamHandler {
 
   private func currentEntitlements(ids: [String]) async -> [[String: Any]] {
     var values: [[String: Any]] = []
+    let products = (try? await Product.products(for: ids)) ?? []
     for await verification in Transaction.currentEntitlements {
       guard case .verified(let transaction) = verification, ids.contains(transaction.productID) else { continue }
-      let state = transaction.revocationDate != nil ? "revoked" :
+      var state = transaction.revocationDate != nil ? "revoked" :
         ((transaction.expirationDate ?? .distantFuture) <= Date() ? "expired" : "active")
+      var autoRenewEnabled = true
+      if let product = products.first(where: { $0.id == transaction.productID }),
+         let subscription = product.subscription,
+         let statuses = try? await subscription.status,
+         let status = statuses.first(where: {
+           guard case .verified(let statusTransaction) = $0.transaction else { return false }
+           return statusTransaction.id == transaction.id
+         }) {
+        state = status.state == Product.SubscriptionInfo.RenewalState.inGracePeriod ? "gracePeriod" :
+          status.state == Product.SubscriptionInfo.RenewalState.inBillingRetryPeriod ? "billingRetry" :
+          status.state == Product.SubscriptionInfo.RenewalState.revoked ? "revoked" :
+          status.state == Product.SubscriptionInfo.RenewalState.expired ? "expired" : "active"
+        if case .verified(let renewalInfo) = status.renewalInfo {
+          autoRenewEnabled = renewalInfo.willAutoRenew
+        }
+      }
       values.append(["productId": transaction.productID,
                      "appAccountToken": transaction.appAccountToken?.uuidString as Any,
                      "state": state,
                      "expiresAt": transaction.expirationDate?.ISO8601Format() as Any,
-                     "autoRenewEnabled": true])
+                     "autoRenewEnabled": autoRenewEnabled])
     }
     return values
   }
