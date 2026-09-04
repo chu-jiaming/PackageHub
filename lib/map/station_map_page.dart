@@ -21,6 +21,7 @@ class StationMapPage extends StatefulWidget {
 class StationMapPageState extends State<StationMapPage> {
   final _resolver = const PickupZoneResolver();
   final _mapTransformationController = TransformationController();
+  bool _mapTransformInitialized = false;
   Map<PickupZoneId, List<PickupCredential>> _groups = {};
   bool _loading = true;
   String? _error;
@@ -134,6 +135,10 @@ class StationMapPageState extends State<StationMapPage> {
                     ? constraints.maxWidth - 16
                     : 0.0;
                 final height = width * 1086 / 1448;
+                _initializeMapTransformIfNeeded(
+                  viewport: Size(constraints.maxWidth, constraints.maxHeight),
+                  content: Size(width, height),
+                );
                 return SizedBox.expand(
                   key: const Key('station-map-viewport'),
                   child: InteractiveViewer(
@@ -147,27 +152,21 @@ class StationMapPageState extends State<StationMapPage> {
                     boundaryMargin: EdgeInsets.zero,
                     clipBehavior: Clip.hardEdge,
                     child: SizedBox(
-                      width: constraints.maxWidth,
-                      height: constraints.maxHeight,
-                      child: Center(
-                        child: SizedBox(
-                          key: const Key('station-map-content'),
-                          width: width,
-                          height: height,
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: Image.asset(
-                                  'lib/map/map.png',
-                                  fit: BoxFit.fill,
-                                ),
-                              ),
-                              ...stationMapZones.map(
-                                (z) => _hotspot(z, width, height),
-                              ),
-                            ],
+                      key: const Key('station-map-content'),
+                      width: width,
+                      height: height,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: Image.asset(
+                              'lib/map/map.png',
+                              fit: BoxFit.fill,
+                            ),
                           ),
-                        ),
+                          ...stationMapZones.map(
+                            (z) => _hotspot(z, width, height),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -199,6 +198,22 @@ class StationMapPageState extends State<StationMapPage> {
         ],
       ),
     );
+  }
+
+  void _initializeMapTransformIfNeeded({
+    required Size viewport,
+    required Size content,
+  }) {
+    if (_mapTransformInitialized) return;
+    _mapTransformInitialized = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _mapTransformationController.value = Matrix4.translationValues(
+        (viewport.width - content.width) / 2,
+        (viewport.height - content.height) / 2,
+        0,
+      );
+    });
   }
 
   Widget _hotspot(StationMapZoneDefinition z, double w, double h) {
