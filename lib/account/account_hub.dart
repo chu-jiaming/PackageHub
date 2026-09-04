@@ -8,6 +8,13 @@ import 'package:packagehub/subscription/subscription_repository.dart';
 import 'package:packagehub/account/account_user.dart';
 import 'package:packagehub/account/devices_page.dart';
 import 'package:packagehub/ui/adaptive.dart';
+import 'package:packagehub/design_system/components/ph_badge.dart';
+import 'package:packagehub/design_system/components/ph_grouped_section.dart';
+import 'package:packagehub/design_system/components/ph_icon_button.dart';
+import 'package:packagehub/design_system/components/ph_list_row.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
+import 'package:packagehub/design_system/tokens/ph_typography.dart';
 
 class AccountHub extends StatefulWidget {
   final AccountRepository accountRepository;
@@ -46,6 +53,7 @@ class _AccountHubState extends State<AccountHub> {
   Widget build(BuildContext context) {
     final state = widget.accountRepository.current;
     final entitlement = widget.subscriptionRepository.current;
+    final colors = PHColorScheme.of(context);
     final width = (MediaQuery.sizeOf(context).width * .84).clamp(300.0, 400.0);
     return Positioned.fill(
       child: Stack(
@@ -77,7 +85,7 @@ class _AccountHubState extends State<AccountHub> {
                     child: child,
                   ),
                   child: Material(
-                    color: Theme.of(context).colorScheme.surface,
+                    color: colors.bgSurface,
                     elevation: 12,
                     child: SizedBox(
                       width: width,
@@ -106,6 +114,7 @@ class _AccountHubState extends State<AccountHub> {
                         onSettings: () => _open(const SettingsPage()),
                         onHelp: () => _open(const HelpFeedbackPage()),
                         onAbout: () => _open(const AboutPage()),
+                        onDismiss: _dismiss,
                       ),
                     ),
                   ),
@@ -128,7 +137,8 @@ class _DrawerContent extends StatelessWidget {
       onDataPrivacy,
       onSettings,
       onHelp,
-      onAbout;
+      onAbout,
+      onDismiss;
   const _DrawerContent({
     required this.state,
     required this.entitlement,
@@ -139,6 +149,7 @@ class _DrawerContent extends StatelessWidget {
     required this.onSettings,
     required this.onHelp,
     required this.onAbout,
+    required this.onDismiss,
   });
 
   @override
@@ -147,38 +158,51 @@ class _DrawerContent extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
       children: [
-        _Header(user: user, signedIn: state.isSignedIn),
-        const SizedBox(height: 20),
-        Semantics(
-          button: true,
-          label: '${SubscriptionPresentation.title(entitlement)}，查看订阅权益',
-          child: Card(
-            child: ListTile(
-              title: Text(SubscriptionPresentation.title(entitlement)),
-              subtitle: Text(SubscriptionPresentation.subtitle(entitlement)),
-              trailing: const Icon(Icons.chevron_right),
+        _Header(user: user, signedIn: state.isSignedIn, onDismiss: onDismiss),
+        const SizedBox(height: PHSpacing.lg),
+        PHGroupedSection(
+          children: [
+            PHListRow(
+              title: SubscriptionPresentation.title(entitlement),
+              subtitle: SubscriptionPresentation.subtitle(entitlement),
+              trailing: PHBadge(
+                label: entitlement.isPro ? 'Pro' : 'Free',
+                variant: entitlement.isPro
+                    ? PHBadgeVariant.success
+                    : PHBadgeVariant.neutral,
+              ),
               onTap: onSubscription,
+              showSeparator: false,
             ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        _Group(
-          rows: [
-            _Row('账号信息', Icons.person_outline, onAccount),
-            _Row('订阅与权益', Icons.star_outline, onSubscription),
-            _Row('登录设备', Icons.devices_outlined, onDevices),
-            _Row('数据与隐私', Icons.lock_outline, onDataPrivacy),
-            _Row('设置', Icons.settings_outlined, onSettings),
           ],
         ),
-        const SizedBox(height: 16),
-        _Group(
-          rows: [
-            _Row('帮助与反馈', Icons.help_outline, onHelp),
-            _Row('关于 PackageHub', Icons.info_outline, onAbout),
+        const SizedBox(height: PHSpacing.lg),
+        PHGroupedSection(
+          children: [
+            _row('账号信息', Icons.person_outline, onAccount),
+            _row('订阅与权益', Icons.star_outline, onSubscription),
+            _row('登录设备', Icons.devices_outlined, onDevices),
+            _row('数据与隐私', Icons.lock_outline, onDataPrivacy),
+            _row('设置', Icons.settings_outlined, onSettings),
+          ],
+        ),
+        const SizedBox(height: PHSpacing.md),
+        PHGroupedSection(
+          children: [
+            _row('帮助与反馈', Icons.help_outline, onHelp),
+            _row('关于 PackageHub', Icons.info_outline, onAbout),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _row(String title, IconData icon, VoidCallback onTap) {
+    return PHListRow(
+      leading: Icon(icon),
+      title: title,
+      onTap: onTap,
+      showSeparator: title != '设置' && title != '关于 PackageHub',
     );
   }
 }
@@ -186,66 +210,49 @@ class _DrawerContent extends StatelessWidget {
 class _Header extends StatelessWidget {
   final AccountUser? user;
   final bool signedIn;
-  const _Header({required this.user, required this.signedIn});
+  final VoidCallback onDismiss;
+  const _Header({
+    required this.user,
+    required this.signedIn,
+    required this.onDismiss,
+  });
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      CircleAvatar(
-        radius: 28,
-        child: signedIn
-            ? Text((user?.displayName ?? 'U').substring(0, 1))
-            : const Icon(Icons.person_outline),
-      ),
-      const SizedBox(width: 14),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              signedIn ? (user?.displayName ?? '用户') : '未登录',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            Text(
-              signedIn ? (user?.email ?? '') : '登录后可管理 Pro 订阅和登录设备',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
-}
-
-class _Group extends StatelessWidget {
-  final List<_Row> rows;
-  const _Group({required this.rows});
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Column(
+  Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
+    return Row(
       children: [
-        for (var i = 0; i < rows.length; i++) ...[
-          rows[i],
-          if (i < rows.length - 1) const Divider(height: 1, indent: 56),
-        ],
+        CircleAvatar(
+          radius: 28,
+          backgroundColor: colors.bgAccentSubtle,
+          foregroundColor: colors.iconAccent,
+          child: signedIn
+              ? Text((user?.displayName ?? 'U').substring(0, 1))
+              : const Icon(Icons.person_outline),
+        ),
+        const SizedBox(width: PHSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                signedIn ? (user?.displayName ?? '用户') : '未登录',
+                style: PHTypography.title3.copyWith(color: colors.textPrimary),
+              ),
+              Text(
+                signedIn ? (user?.email ?? '') : '登录后可管理 Pro 订阅和登录设备',
+                style: PHTypography.footnote.copyWith(
+                  color: colors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        PHIconButton(
+          icon: const Icon(Icons.close),
+          semanticsLabel: '关闭账户面板',
+          onPressed: onDismiss,
+        ),
       ],
-    ),
-  );
-}
-
-class _Row extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _Row(this.title, this.icon, this.onTap);
-  @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: title,
-    child: ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
-    ),
-  );
+    );
+  }
 }

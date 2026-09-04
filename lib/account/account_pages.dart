@@ -15,6 +15,9 @@ import 'package:packagehub/design_system/components/ph_list_row.dart';
 import 'package:packagehub/design_system/components/ph_navigation_header.dart';
 import 'package:packagehub/design_system/components/ph_section_header.dart';
 import 'package:packagehub/design_system/components/ph_empty_state.dart';
+import 'package:packagehub/design_system/components/ph_badge.dart';
+import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/components/ph_segmented_control.dart';
 
 void showPhaseOneNotice(BuildContext context, String message) {
   showCupertinoDialog<void>(
@@ -143,47 +146,41 @@ class SubscriptionPage extends StatelessWidget {
         final entitlement = snapshot.data ?? subscriptionRepository.current;
         final isPro = entitlement.isPro;
         return Scaffold(
-          appBar: AppBar(title: const Text('订阅与权益')),
+          appBar: PHNavigationHeader(
+            title: '订阅与权益',
+            leading: IconButton(
+              tooltip: '返回',
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.arrow_back),
+            ),
+          ),
           body: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.only(bottom: 24),
             children: [
-              _SectionCard(
-                title: SubscriptionPresentation.title(entitlement),
-                subtitle: SubscriptionPresentation.subtitle(entitlement),
-                child: isPro
-                    ? Text(SubscriptionPresentation.date(entitlement.expiresAt))
-                    : const Text('解锁未来持续服务能力。'),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                isPro ? '当前方案' : 'Pro 计划将包含',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              for (final item in const [
-                '无限待取件凭证',
-                '批量标记已取件',
-                '批量删除',
-                '更多高级管理能力',
-                '后续 Pro 功能',
-              ])
-                ListTile(
-                  leading: const Icon(Icons.check_circle_outline),
-                  title: Text(item),
-                ),
-              const SizedBox(height: 16),
-              if (!isPro && accountRepository?.current.isSignedIn == false)
-                FilledButton(
-                  onPressed: accountRepository == null
-                      ? null
-                      : () => accountRepository!.signInWithApple(),
-                  child: const Text('使用 Apple 登录以订阅'),
-                )
-              else if (!isPro)
-                _PurchaseButton(repository: subscriptionRepository),
-              OutlinedButton(
-                onPressed: () => subscriptionRepository.restorePurchases(),
-                child: const Text('恢复购买'),
+              PHGroupedSection(
+                title: '当前方案',
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  PHListRow(
+                    title: SubscriptionPresentation.title(entitlement),
+                    subtitle: SubscriptionPresentation.subtitle(entitlement),
+                    trailing: PHBadge(
+                      label: isPro ? '已订阅' : '未订阅',
+                      variant: isPro
+                          ? PHBadgeVariant.success
+                          : PHBadgeVariant.neutral,
+                    ),
+                    showChevron: false,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Text(
+                      isPro
+                          ? SubscriptionPresentation.date(entitlement.expiresAt)
+                          : '解锁未来持续服务能力。',
+                    ),
+                  ),
+                ],
               ),
               if (devEntitlementOverrideAllowed &&
                   subscriptionRepository is ResolvedSubscriptionRepository)
@@ -191,6 +188,40 @@ class SubscriptionPage extends StatelessWidget {
                   repository:
                       subscriptionRepository as ResolvedSubscriptionRepository,
                 ),
+              PHSectionHeader(title: isPro ? '当前方案' : 'Pro 计划将包含'),
+              PHGroupedSection(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  for (var i = 0; i < 5; i++)
+                    PHListRow(
+                      leading: const Icon(Icons.check_circle_outline),
+                      title: const [
+                        '无限待取件凭证',
+                        '批量标记已取件',
+                        '批量删除',
+                        '更多高级管理能力',
+                        '后续 Pro 功能',
+                      ][i],
+                      showChevron: false,
+                      showSeparator: i < 4,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (!isPro && accountRepository?.current.isSignedIn == false)
+                PHButton(
+                  onPressed: accountRepository == null
+                      ? null
+                      : () => accountRepository!.signInWithApple(),
+                  label: '使用 Apple 登录以订阅',
+                )
+              else if (!isPro)
+                _PurchaseButton(repository: subscriptionRepository),
+              PHButton(
+                variant: PHButtonVariant.secondary,
+                onPressed: () => subscriptionRepository.restorePurchases(),
+                label: '恢复购买',
+              ),
             ],
           ),
         );
@@ -241,13 +272,11 @@ class _PurchaseButtonState extends State<_PurchaseButton> {
   }
 
   @override
-  Widget build(BuildContext context) => FilledButton(
+  Widget build(BuildContext context) => PHButton(
     onPressed: _busy || _product == null ? null : _buy,
-    child: Text(
-      _product == null
-          ? '暂时无法加载订阅信息'
-          : '升级到 ${_product!.displayName} · ${_product!.displayPrice}',
-    ),
+    label: _product == null
+        ? '暂时无法加载订阅信息'
+        : '升级到 ${_product!.displayName} · ${_product!.displayPrice}',
   );
 }
 
@@ -255,39 +284,32 @@ class _DebugSubscriptionControls extends StatelessWidget {
   final ResolvedSubscriptionRepository repository;
   const _DebugSubscriptionControls({required this.repository});
   @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(top: 24),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('开发工具'),
-          const SizedBox(height: 8),
-          const Text('开发权益覆盖'),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 48,
-            child: CupertinoSlidingSegmentedControl<DebugEntitlementMode>(
-              key: const Key('debugEntitlementSegmentedControl'),
-              groupValue: repository.mode,
-              children: const {
-                DebugEntitlementMode.automatic: Text('真实'),
-                DebugEntitlementMode.free: Text('Free'),
-                DebugEntitlementMode.pro: Text('Pro'),
-              },
-              onValueChanged: (value) {
-                if (value != null) {
-                  repository.debugOverrideController.setOverride(value);
-                }
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text('仅开发构建，用于测试 Free / Pro 功能门禁。'),
-        ],
+  Widget build(BuildContext context) => PHGroupedSection(
+    title: '开发工具',
+    margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        child: PHSegmentedControl<DebugEntitlementMode>(
+          key: const Key('debugEntitlementSegmentedControl'),
+          value: repository.mode,
+          children: const {
+            DebugEntitlementMode.automatic: Text('真实'),
+            DebugEntitlementMode.free: Text('Free'),
+            DebugEntitlementMode.pro: Text('Pro'),
+          },
+          onValueChanged: (value) {
+            if (value != null) {
+              repository.debugOverrideController.setOverride(value);
+            }
+          },
+        ),
       ),
-    ),
+      const Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Text('仅开发构建，用于测试 Free / Pro 功能门禁。'),
+      ),
+    ],
   );
 }
 
@@ -481,32 +503,5 @@ class _AccountIdentity extends StatelessWidget {
         ],
       ),
     ],
-  );
-}
-
-class _SectionCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final Widget child;
-  const _SectionCard({
-    required this.title,
-    required this.subtitle,
-    required this.child,
-  });
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 6),
-          Text(subtitle),
-          const SizedBox(height: 12),
-          child,
-        ],
-      ),
-    ),
   );
 }
