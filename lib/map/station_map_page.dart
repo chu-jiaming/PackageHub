@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:packagehub/core/repository/pickup_credential_repository.dart';
@@ -22,6 +23,12 @@ class StationMapPageState extends State<StationMapPage> {
   final _resolver = const PickupZoneResolver();
   final _mapTransformationController = TransformationController();
   bool _mapTransformInitialized = false;
+  double? _scaleGestureStartScale;
+  Offset? _scaleGestureStartSceneFocalPoint;
+  Offset? _scaleGestureStartLocalFocalPoint;
+  final _activeMapPointers = <int, Offset>{};
+  bool _scaleGestureFocalPointLocked = false;
+  bool _correctingScaleTransform = false;
   Map<PickupZoneId, List<PickupCredential>> _groups = {};
   bool _loading = true;
   String? _error;
@@ -29,6 +36,7 @@ class StationMapPageState extends State<StationMapPage> {
   @override
   void initState() {
     super.initState();
+    _mapTransformationController.addListener(_maintainScaleGestureAnchor);
     load();
   }
 
@@ -61,6 +69,7 @@ class StationMapPageState extends State<StationMapPage> {
 
   @override
   void dispose() {
+    _mapTransformationController.removeListener(_maintainScaleGestureAnchor);
     _mapTransformationController.dispose();
     super.dispose();
   }
@@ -145,32 +154,41 @@ class StationMapPageState extends State<StationMapPage> {
                 );
                 return SizedBox.expand(
                   key: const Key('station-map-viewport'),
-                  child: InteractiveViewer(
-                    transformationController: _mapTransformationController,
-                    minScale: 1,
-                    maxScale: 4,
-                    panEnabled: true,
-                    scaleEnabled: true,
-                    constrained: false,
-                    alignment: Alignment.center,
-                    boundaryMargin: boundaryMargin,
-                    clipBehavior: Clip.hardEdge,
-                    child: SizedBox(
-                      key: const Key('station-map-content'),
-                      width: width,
-                      height: height,
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Image.asset(
-                              'lib/map/map.png',
-                              fit: BoxFit.fill,
+                  child: Listener(
+                    onPointerDown: _onMapPointerDown,
+                    onPointerUp: _onMapPointerUp,
+                    onPointerCancel: _onMapPointerCancel,
+                    child: InteractiveViewer(
+                      transformationController: _mapTransformationController,
+                      minScale: 1,
+                      maxScale: 4,
+                      panEnabled: true,
+                      scaleEnabled: true,
+                      onInteractionStart: _onMapInteractionStart,
+                      onInteractionUpdate: _onMapInteractionUpdate,
+                      onInteractionEnd: _onMapInteractionEnd,
+                      interactionEndFrictionCoefficient: 1e9,
+                      constrained: false,
+                      alignment: Alignment.center,
+                      boundaryMargin: boundaryMargin,
+                      clipBehavior: Clip.hardEdge,
+                      child: SizedBox(
+                        key: const Key('station-map-content'),
+                        width: width,
+                        height: height,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Image.asset(
+                                'lib/map/map.png',
+                                fit: BoxFit.fill,
+                              ),
                             ),
-                          ),
-                          ...stationMapZones.map(
-                            (z) => _hotspot(z, width, height),
-                          ),
-                        ],
+                            ...stationMapZones.map(
+                              (z) => _hotspot(z, width, height),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -218,6 +236,108 @@ class StationMapPageState extends State<StationMapPage> {
         0,
       );
     });
+  }
+
+  void _onMapInteractionStart(ScaleStartDetails details) {
+    _scaleGestureStartScale = _mapTransformationController.value
+        .getMaxScaleOnAxis();
+    if (_activeMapPointers.length < 2) {
+      _scaleGestureStartLocalFocalPoint = null;
+      _scaleGestureStartSceneFocalPoint = null;
+      _scaleGestureFocalPointLocked = false;
+    }
+  }
+
+  void _onMapInteractionUpdate(ScaleUpdateDetails details) {
+    final startScale = _scaleGestureStartScale;
+    final startSceneFocalPoint = _scaleGestureStartSceneFocalPoint;
+    final startLocalFocalPoint = _scaleGestureStartLocalFocalPoint;
+    if (startScale == null || (details.scale - 1).abs() < .0001) {
+      if (startScale != null && !_scaleGestureFocalPointLocked) {
+        _scaleGestureStartLocalFocalPoint = details.localFocalPoint;
+        _scaleGestureStartSceneFocalPoint = _mapTransformationController
+            .toScene(details.localFocalPoint);
+      }
+      return;
+    }
+
+    final lockedLocalFocalPoint =
+        startLocalFocalPoint ?? details.localFocalPoint;
+    final lockedSceneFocalPoint =
+        startSceneFocalPoint ??
+        _mapTransformationController.toScene(details.localFocalPoint);
+    _scaleGestureStartLocalFocalPoint = lockedLocalFocalPoint;
+    _scaleGestureStartSceneFocalPoint = lockedSceneFocalPoint;
+    _scaleGestureFocalPointLocked = true;
+
+    final targetScale = (startScale * details.scale).clamp(1.0, 4.0);
+    _setScaleMatrixAtLockedAnchor(targetScale);
+  }
+
+  void _maintainScaleGestureAnchor() {
+    if (!_scaleGestureFocalPointLocked || _correctingScaleTransform) return;
+    _setScaleMatrixAtLockedAnchor(
+      _mapTransformationController.value.getMaxScaleOnAxis(),
+    );
+  }
+
+  void _setScaleMatrixAtLockedAnchor(double scale) {
+    final lockedLocalFocalPoint = _scaleGestureStartLocalFocalPoint;
+    final lockedSceneFocalPoint = _scaleGestureStartSceneFocalPoint;
+    if (lockedLocalFocalPoint == null || lockedSceneFocalPoint == null) return;
+
+    final targetMatrix = Matrix4.identity()
+      ..setEntry(0, 0, scale)
+      ..setEntry(1, 1, scale)
+      ..setEntry(
+        0,
+        3,
+        lockedLocalFocalPoint.dx - scale * lockedSceneFocalPoint.dx,
+      )
+      ..setEntry(
+        1,
+        3,
+        lockedLocalFocalPoint.dy - scale * lockedSceneFocalPoint.dy,
+      );
+    _correctingScaleTransform = true;
+    _mapTransformationController.value = targetMatrix;
+    _correctingScaleTransform = false;
+  }
+
+  void _onMapInteractionEnd(ScaleEndDetails details) {
+    _scaleGestureStartScale = null;
+    if (_scaleGestureFocalPointLocked) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maintainScaleGestureAnchor();
+      });
+    }
+  }
+
+  void _onMapPointerDown(PointerDownEvent event) {
+    if (event.kind != PointerDeviceKind.touch) return;
+    _activeMapPointers[event.pointer] = event.localPosition;
+    if (_activeMapPointers.length != 2) return;
+
+    final points = _activeMapPointers.values.toList();
+    final focalPoint = Offset(
+      (points[0].dx + points[1].dx) / 2,
+      (points[0].dy + points[1].dy) / 2,
+    );
+    _scaleGestureStartScale = _mapTransformationController.value
+        .getMaxScaleOnAxis();
+    _scaleGestureStartLocalFocalPoint = focalPoint;
+    _scaleGestureStartSceneFocalPoint = _mapTransformationController.toScene(
+      focalPoint,
+    );
+    _scaleGestureFocalPointLocked = true;
+  }
+
+  void _onMapPointerUp(PointerUpEvent event) {
+    _activeMapPointers.remove(event.pointer);
+  }
+
+  void _onMapPointerCancel(PointerCancelEvent event) {
+    _activeMapPointers.remove(event.pointer);
   }
 
   Widget _hotspot(StationMapZoneDefinition z, double w, double h) {

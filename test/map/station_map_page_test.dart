@@ -193,4 +193,46 @@ void main() {
       closeTo(1, .001),
     );
   });
+
+  testWidgets('pinch keeps the initial two-finger center as the zoom anchor', (
+    tester,
+  ) async {
+    await pumpMap(tester);
+
+    final viewerFinder = find.byType(InteractiveViewer);
+    final viewer = tester.widget<InteractiveViewer>(viewerFinder);
+    final controller = viewer.transformationController!;
+    final viewerTopLeft = tester.getTopLeft(viewerFinder);
+    const globalFocalPoint = Offset(195, 400);
+    final initialFocalPoint = globalFocalPoint - viewerTopLeft;
+    final firstFinger = await tester.startGesture(
+      globalFocalPoint - const Offset(45, 0),
+      pointer: 5,
+    );
+    final secondFinger = await tester.startGesture(
+      globalFocalPoint + const Offset(45, 0),
+      pointer: 6,
+    );
+    await tester.pump();
+    final initialScenePoint = controller.toScene(initialFocalPoint);
+    await firstFinger.moveTo(globalFocalPoint + const Offset(-95, -20));
+    await secondFinger.moveTo(globalFocalPoint + const Offset(55, 20));
+    await tester.pump();
+    await firstFinger.up();
+    await secondFinger.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.toScene(initialFocalPoint),
+      isA<Offset>().having(
+        (point) => point.dx,
+        'dx',
+        closeTo(initialScenePoint.dx, .01),
+      ),
+    );
+    expect(
+      controller.toScene(initialFocalPoint).dy,
+      closeTo(initialScenePoint.dy, .01),
+    );
+  });
 }
