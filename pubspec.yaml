@@ -44,6 +44,7 @@ dependencies:
   keyboard_actions: ^5.0.2
   http: ^1.5.0
   crypto: ^3.0.6
+  jose: ^0.3.5+2
 
 dev_dependencies:
   flutter_test:

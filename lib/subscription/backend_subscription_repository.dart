@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:jose/jose.dart';
 import 'package:packagehub/account/account_api_client.dart';
 import 'package:packagehub/account/account_repository.dart';
 import 'package:packagehub/account/secure_token_store.dart';
@@ -12,11 +13,16 @@ import 'subscription_state.dart';
 /// boundary explicit prevents a cached StoreKit transaction from becoming an
 /// entitlement by accident.
 abstract interface class EntitlementTokenVerifier {
-  Map<String, dynamic>? verify(String token, {required String userId, required String deviceId});
+  Future<Map<String, dynamic>?> verify(String token, {required String userId, required String deviceId});
 }
 class RejectingEntitlementTokenVerifier implements EntitlementTokenVerifier {
   const RejectingEntitlementTokenVerifier();
-  @override Map<String, dynamic>? verify(String token, {required String userId, required String deviceId}) => null;
+  @override Future<Map<String, dynamic>?> verify(String token, {required String userId, required String deviceId}) async => null;
+}
+class Es256EntitlementTokenVerifier implements EntitlementTokenVerifier {
+  final JsonWebKey key;
+  Es256EntitlementTokenVerifier(String publicKeyPem, {String? keyId}) : key=JsonWebKey.fromPem(publicKeyPem,keyId:keyId);
+  @override Future<Map<String,dynamic>?> verify(String token,{required String userId,required String deviceId}) async { try {final jws=JsonWebSignature.fromCompactSerialization(token); final header=jws.commonProtectedHeader.toJson(); if(header['alg']!='ES256')return null; final keys=JsonWebKeyStore()..addKey(key); if(!await jws.verify(keys))return null; final p=jws.unverifiedPayload.jsonContent as Map<String,dynamic>; if(p['iss']!='packagehub'||p['sub']!=userId||p['device_id']!=deviceId||p['is_pro']!=true)return null; return p;} catch(_){return null;} }
 }
 
 class BackendSubscriptionRepository implements SubscriptionRepository {
@@ -27,6 +33,7 @@ class BackendSubscriptionRepository implements SubscriptionRepository {
   final EntitlementTokenVerifier verifier;
   final _changes = StreamController<SubscriptionEntitlement>.broadcast();
   SubscriptionEntitlement _current = const SubscriptionEntitlement(state: SubscriptionState.free);
+  String? _deviceId;
   BackendSubscriptionRepository({required this.account, required this.api, required this.storeKit, EntitlementTokenStore? tokenStore, required this.verifier}) : tokenStore = tokenStore ?? KeychainEntitlementTokenStore();
   @override SubscriptionEntitlement get current => _current;
   @override Stream<SubscriptionEntitlement> get changes => _changes.stream;
@@ -34,7 +41,7 @@ class BackendSubscriptionRepository implements SubscriptionRepository {
   SubscriptionEntitlement _from(BackendEntitlement e) => SubscriptionEntitlement(state: _state(e.state),productId:e.productId,planDisplayName:e.planDisplayName,expiresAt:e.expiresAt==null?null:DateTime.tryParse(e.expiresAt!),autoRenewEnabled:e.autoRenewEnabled);
   SubscriptionState _state(String s)=>switch(s){'trial'=>SubscriptionState.trial,'gracePeriod'=>SubscriptionState.gracePeriod,'billingRetry'=>SubscriptionState.billingRetry,'expired'=>SubscriptionState.expired,'revoked'=>SubscriptionState.revoked,_=>s=='active'?SubscriptionState.active:SubscriptionState.free};
   String? _access() => account.accessToken;
-  @override Future<void> refresh() async { final a=_access(); final u=account.current.user; if(a==null||u==null){await tokenStore.clear();return _set(const SubscriptionEntitlement(state:SubscriptionState.free));} try{final e=await api.entitlement(a); if(e.signedEntitlementToken!=null) await tokenStore.save(e.signedEntitlementToken!); _set(_from(e));}catch(_){final t=await tokenStore.read(); final claims=t==null?null:verifier.verify(t,userId:u.id,deviceId:''); if(claims==null||DateTime.fromMillisecondsSinceEpoch((claims['exp'] as num).toInt()*1000).isBefore(DateTime.now())){_set(const SubscriptionEntitlement(state:SubscriptionState.free));}} }
+  @override Future<void> refresh() async { final a=_access(); final u=account.current.user; if(a==null||u==null){await tokenStore.clear();return _set(const SubscriptionEntitlement(state:SubscriptionState.free));} try{final e=await api.entitlement(a); _deviceId=e.deviceId; if(e.signedEntitlementToken!=null) await tokenStore.save(e.signedEntitlementToken!); _set(_from(e));}catch(_){final t=await tokenStore.read(); final claims=t==null||_deviceId==null?null:await verifier.verify(t,userId:u.id,deviceId:_deviceId!); if(claims==null||DateTime.fromMillisecondsSinceEpoch((claims['exp'] as num).toInt()*1000).isBefore(DateTime.now())){_set(const SubscriptionEntitlement(state:SubscriptionState.free));}} }
   @override Future<StoreProduct?> loadProProduct()=>storeKit.loadProducts(['packagehub.pro']).then((p)=>p.where((x)=>x.id=='packagehub.pro').firstOrNull);
   @override Future<StorePurchaseResult> purchasePro() async { final r=await storeKit.purchase(productId:'packagehub.pro',appAccountToken:(await account.storeKitAppAccountToken())??''); if(r.status==StorePurchaseStatus.purchased&&r.signedTransaction!=null){final a=_access();if(a!=null) {await api.confirmTransaction(a,r.signedTransaction!); await refresh();}} return r; }
   @override Future<void> restorePurchases() async {await storeKit.restorePurchases(); await refresh();}

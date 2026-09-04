@@ -29,11 +29,12 @@ class StoreKitContext {
 
 class BackendEntitlement {
   final String state;
+  final String? deviceId;
   final bool isPro;
   final String? productId, planDisplayName, expiresAt, signedEntitlementToken;
   final bool autoRenewEnabled;
   final String deviceAccess;
-  const BackendEntitlement({required this.state, required this.isPro, this.productId, this.planDisplayName, this.expiresAt, this.signedEntitlementToken, this.autoRenewEnabled=false, this.deviceAccess='allowed'});
+  const BackendEntitlement({required this.state, required this.isPro, this.productId, this.planDisplayName, this.expiresAt, this.signedEntitlementToken, this.deviceId, this.autoRenewEnabled=false, this.deviceAccess='allowed'});
 }
 
 class AccountApiClient {
@@ -146,7 +147,7 @@ class AccountApiClient {
   Future<BackendEntitlement> entitlement(String accessToken) async {
     final r=await client.get(_uri('/v1/me/entitlement'),headers:{'authorization':'Bearer $accessToken'});
     if(r.statusCode>=400) throw AccountApiException(r.statusCode,'entitlement_failed');
-    final j=jsonDecode(r.body); return BackendEntitlement(state:j['state'],isPro:j['isPro']??false,productId:j['productId'],planDisplayName:j['planDisplayName'],expiresAt:j['expiresAt'],signedEntitlementToken:j['signedEntitlementToken'],autoRenewEnabled:j['autoRenewEnabled']??false,deviceAccess:j['deviceAccess']??'allowed');
+    final j=jsonDecode(r.body); return BackendEntitlement(state:j['state'],isPro:j['isPro']??false,productId:j['productId'],planDisplayName:j['planDisplayName'],expiresAt:j['expiresAt'],deviceId:j['deviceId'],signedEntitlementToken:j['signedEntitlementToken'],autoRenewEnabled:j['autoRenewEnabled']??false,deviceAccess:j['deviceAccess']??'allowed');
   }
   Future<void> removeDevice(String accessToken,String deviceId) async { final r=await client.delete(_uri('/v1/me/devices/$deviceId'),headers:{'authorization':'Bearer $accessToken'}); if(r.statusCode>=400) throw AccountApiException(r.statusCode,'device_remove_failed'); }
 

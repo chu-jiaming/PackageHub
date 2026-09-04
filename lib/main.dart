@@ -56,7 +56,9 @@ void main() {
     account: account,
     api: AccountApiClient(baseUrl),
     storeKit: MethodChannelStoreKitClient(),
-    verifier: const RejectingEntitlementTokenVerifier(),
+    verifier: const String.fromEnvironment('PACKAGEHUB_ENTITLEMENT_PUBLIC_KEY').isEmpty
+        ? const RejectingEntitlementTokenVerifier()
+        : Es256EntitlementTokenVerifier(const String.fromEnvironment('PACKAGEHUB_ENTITLEMENT_PUBLIC_KEY')),
   );
   runApp(
     PackageHubApp(
