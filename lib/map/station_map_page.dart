@@ -20,6 +20,7 @@ class StationMapPage extends StatefulWidget {
 
 class StationMapPageState extends State<StationMapPage> {
   final _resolver = const PickupZoneResolver();
+  final _mapTransformationController = TransformationController();
   Map<PickupZoneId, List<PickupCredential>> _groups = {};
   bool _loading = true;
   String? _error;
@@ -55,6 +56,12 @@ class StationMapPageState extends State<StationMapPage> {
         });
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _mapTransformationController.dispose();
+    super.dispose();
   }
 
   Future<void> _open(StationMapZoneDefinition zone) async {
@@ -123,27 +130,44 @@ class StationMapPageState extends State<StationMapPage> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final width = constraints.maxWidth;
+                final width = constraints.maxWidth > 16
+                    ? constraints.maxWidth - 16
+                    : 0.0;
                 final height = width * 1086 / 1448;
-                return Center(
+                return SizedBox.expand(
+                  key: const Key('station-map-viewport'),
                   child: InteractiveViewer(
-                    minScale: .8,
+                    transformationController: _mapTransformationController,
+                    minScale: 1,
                     maxScale: 4,
+                    panEnabled: true,
+                    scaleEnabled: true,
+                    constrained: false,
+                    alignment: Alignment.center,
+                    boundaryMargin: EdgeInsets.zero,
+                    clipBehavior: Clip.hardEdge,
                     child: SizedBox(
-                      width: width,
-                      height: height,
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Image.asset(
-                              'lib/map/map.png',
-                              fit: BoxFit.fill,
-                            ),
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      child: Center(
+                        child: SizedBox(
+                          key: const Key('station-map-content'),
+                          width: width,
+                          height: height,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: Image.asset(
+                                  'lib/map/map.png',
+                                  fit: BoxFit.fill,
+                                ),
+                              ),
+                              ...stationMapZones.map(
+                                (z) => _hotspot(z, width, height),
+                              ),
+                            ],
                           ),
-                          ...stationMapZones.map(
-                            (z) => _hotspot(z, width, height),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -152,20 +176,26 @@ class StationMapPageState extends State<StationMapPage> {
             ),
           ),
           if (_groups[PickupZoneId.unmapped]?.isNotEmpty == true)
-            ListTile(
-              title: Text('未定位 ${_groups[PickupZoneId.unmapped]!.length}'),
-              leading: const Icon(CupertinoIcons.question_circle),
-              onTap: () => _open(
-                const StationMapZoneDefinition(
-                  id: PickupZoneId.unmapped,
-                  label: '未定位',
-                  subtitle: '需要确认区域',
-                  normalizedRect: Rect.fromLTRB(0, 0, 1, 1),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 64),
+              child: ListTile(
+                title: Text('未定位 ${_groups[PickupZoneId.unmapped]!.length}'),
+                leading: const Icon(CupertinoIcons.question_circle),
+                onTap: () => _open(
+                  const StationMapZoneDefinition(
+                    id: PickupZoneId.unmapped,
+                    label: '未定位',
+                    subtitle: '需要确认区域',
+                    normalizedRect: Rect.fromLTRB(0, 0, 1, 1),
+                  ),
                 ),
               ),
             )
           else if (!_loading && _groups.isEmpty)
-            const Padding(padding: EdgeInsets.all(8), child: Text('暂无待取件快递')),
+            ConstrainedBox(
+              constraints: BoxConstraints(minHeight: 64),
+              child: Center(child: Text('暂无待取件快递')),
+            ),
         ],
       ),
     );
