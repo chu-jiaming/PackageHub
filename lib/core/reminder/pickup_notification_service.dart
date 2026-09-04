@@ -10,19 +10,25 @@ class PickupNotificationService {
   bool _initialized = false;
 
   PickupNotificationService({FlutterLocalNotificationsPlugin? plugin})
-      : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+    : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   Future<void> initialize() async {
     if (_initialized) return;
     tz.initializeTimeZones();
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const ios = DarwinInitializationSettings();
-    await _plugin.initialize(const InitializationSettings(android: android, iOS: ios));
+    await _plugin.initialize(
+      const InitializationSettings(android: android, iOS: ios),
+    );
     await _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.requestNotificationsPermission();
     await _plugin
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >()
         ?.requestPermissions(alert: true, badge: true, sound: true);
     _initialized = true;
   }
@@ -36,7 +42,9 @@ class PickupNotificationService {
     if (!settings.enabled) return;
     final now = tz.TZDateTime.now(tz.local);
     for (final credential in credentials) {
-      if (credential.id == null || credential.status != PickupStatus.pending) continue;
+      if (credential.id == null || credential.status != PickupStatus.pending) {
+        continue;
+      }
       final scheduled = tz.TZDateTime.from(
         credential.createdAt.add(Duration(days: settings.days)),
         tz.local,
@@ -45,7 +53,9 @@ class PickupNotificationService {
         credential.id!,
         '取件提醒',
         '有一个包裹已超过 ${settings.days} 天未取件，请及时取件。',
-        scheduled.isBefore(now) ? now.add(const Duration(seconds: 2)) : scheduled,
+        scheduled.isBefore(now)
+            ? now.add(const Duration(seconds: 2))
+            : scheduled,
         const NotificationDetails(
           android: AndroidNotificationDetails(
             'pickup_reminders',

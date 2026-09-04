@@ -1,9 +1,89 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:packagehub/core/parser/pickup_parser.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
+import 'package:packagehub/recognition/recognition_evidence.dart';
 
 void main() {
   group('PickupParser', () {
+    test(
+      'parseAll extracts multiple credentials with local tracking context',
+      () {
+        final drafts = PickupParser.parseAll('''
+【中通快递】
+取件码为D1-4-2586
+运单号731111111111
+【申通快递】
+凭326-4-6038到站取件
+运单号777440230805597
+''');
+
+        expect(drafts, hasLength(2));
+        expect(drafts[0].pickupCode, 'D1-4-2586');
+        expect(drafts[0].courierCompany, CourierCompany.zto);
+        expect(drafts[0].trackingNumber, '731111111111');
+        expect(drafts[1].pickupCode, '326-4-6038');
+        expect(drafts[1].courierCompany, CourierCompany.sto);
+        expect(drafts[1].trackingNumber, '777440230805597');
+        expect(
+          drafts.every((draft) => draft.status == PickupStatus.pending),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'parseAll safely shares one direct courier but does not share tracking',
+      () {
+        final drafts = PickupParser.parseAll('''
+【中通快递】
+您有两个包裹
+取件码为D1-4-2586
+运单号731111111111
+取件码为D9-2-3700
+''');
+
+        expect(drafts, hasLength(2));
+        expect(
+          drafts.map((draft) => draft.courierCompany),
+          everyElement(CourierCompany.zto),
+        );
+        expect(drafts[0].trackingNumber, '731111111111');
+        expect(drafts[1].trackingNumber, isNull);
+      },
+    );
+
+    test(
+      'parseAll keeps compact competing pickup candidates as one conflict',
+      () {
+        final drafts = PickupParser.parseAll('取件码为D1-4-2586，凭D9-2-3700到快递站取件');
+
+        expect(drafts, hasLength(1));
+        expect(drafts.single.pickupCode, 'D1-4-2586');
+        expect(drafts.single.conflicts, isNotEmpty);
+      },
+    );
+
+    test('parseAll independently infers courier prefixes', () {
+      final drafts = PickupParser.parseAll('''
+取件码为D1-4-2586
+取件码为X3-2-1234
+''');
+
+      expect(drafts, hasLength(2));
+      expect(drafts[0].courierCompany, CourierCompany.zto);
+      expect(drafts[1].courierCompany, CourierCompany.sto);
+    });
+
+    test('parseAll deduplicates the same normalized pickup anchor', () {
+      final drafts = PickupParser.parseAll('''
+取件码为D1-4-2586
+详情：凭D1-4-2586到站取件
+''');
+
+      expect(drafts, hasLength(1));
+      expect(drafts.single.pickupCode, 'D1-4-2586');
+    });
+
     test('parses real pinduoduo OCR fixture without using tracking data', () {
       const rawText = '''
 08:04
@@ -113,7 +193,7 @@ void main() {
       expect(draft.trackingNumber, isNull);
       expect(draft.pickupCode, isNull);
       expect(draft.stationName, isNull);
-      expect(draft.status, PickupStatus.unknown);
+      expect(draft.status, PickupStatus.pending);
     });
 
     test('prioritizes shopping platform over cainiao keyword', () {
@@ -319,6 +399,236 @@ void main() {
       expect(
         PickupParser.parse('圆通快递\n取件码 X1-1-123').courierCompany,
         CourierCompany.yto,
+      );
+    });
+
+    test('keyword pickup code wins over 凭 context and reports conflict', () {
+      final draft = PickupParser.parse('取件码为D1-4-2586，凭D9-2-3700到快递站取件');
+      expect(draft.pickupCode, 'D1-4-2586');
+      expect(draft.conflicts, hasLength(1));
+      expect(draft.conflicts.single.alternatives.single.value, 'D9-2-3700');
+    });
+
+    test('same pickup code from keyword and 凭 context is not a conflict', () {
+      final draft = PickupParser.parse('取件码为D1-4-2586，凭D1-4-2586到快递站取件');
+      expect(draft.pickupCode, 'D1-4-2586');
+      expect(draft.conflicts, isEmpty);
+    });
+
+    test('multiple explicit courier names conflict and block inference', () {
+      final draft = PickupParser.parse('【申通快递】【圆通快递】取件码为X1-2-3456');
+      // The registry's stable courier pattern order makes 圆通 the winner.
+      expect(draft.courierCompany, CourierCompany.yto);
+      expect(draft.conflicts.single.field, RecognitionField.courierCompany);
+      expect(
+        draft.evidence.where((e) => e.field == RecognitionField.courierCompany),
+        hasLength(1),
+      );
+      expect(
+        draft.evidence
+            .where((e) => e.field == RecognitionField.courierCompany)
+            .single
+            .kind,
+        RecognitionEvidenceKind.direct,
+      );
+    });
+
+    test('registry has stable direct order', () {
+      final ids = PickupParser.ruleRegistry.directRules
+          .map((rule) => rule.id)
+          .toList();
+      expect(
+        ids.indexOf('pickup_code.explicit_keyword'),
+        lessThan(ids.indexOf('pickup_code.after_ping')),
+      );
+    });
+
+    test('OCR logistics status phrases never change the new draft status', () {
+      for (final text in [
+        '您的包裹已签收，取件码为D1-4-2586',
+        '包裹已送达快递站，取件码为D1-4-2586',
+        '包裹已入库，请取件',
+        '订单已完成',
+        '已取件',
+      ]) {
+        expect(PickupParser.parse(text).status, PickupStatus.pending);
+      }
+    });
+
+    test('weak OCR still creates a pending draft', () {
+      final draft = PickupParser.parse('没有可识别的物流字段');
+      expect(draft.status, PickupStatus.pending);
+      expect(draft.courierCompany, CourierCompany.unknown);
+      expect(draft.pickupCode, isNull);
+      expect(draft.trackingNumber, isNull);
+    });
+
+    test('recognizes a pickup code shown directly in one app card', () {
+      const rawText = '''
+临时场地1|校内申通快递＞查看地址
+申通
+519-3-9180
+今日到站 查单号添加
+申通 777440538759180
+好友代取
+跑腿送货
+''';
+
+      final draft = PickupParser.parseAll(rawText).single;
+
+      expect(draft.pickupCode, '519-3-9180');
+      expect(draft.courierCompany, CourierCompany.sto);
+      expect(draft.trackingNumber, '777440538759180');
+      expect(draft.status, PickupStatus.pending);
+      final pickupEvidence = draft.evidence.singleWhere(
+        (evidence) => evidence.field == RecognitionField.pickupCode,
+      );
+      expect(pickupEvidence.kind, RecognitionEvidenceKind.direct);
+      expect(pickupEvidence.ruleId, 'pickup_code.app_card_context');
+      expect(pickupEvidence.matchedText, '519-3-9180');
+    });
+
+    test('recognizes app cards with bounded arrived-time cues', () {
+      for (final arrival in ['已到站1小时', '已到站30分钟', '已到站']) {
+        final draft = PickupParser.parse('''600-3-8599
+$arrival
+极兔速递''');
+
+        expect(draft.pickupCode, '600-3-8599', reason: arrival);
+        expect(draft.courierCompany, CourierCompany.jtexpress, reason: arrival);
+        expect(draft.trackingNumber, isNull, reason: arrival);
+        expect(draft.status, PickupStatus.pending, reason: arrival);
+        expect(
+          draft.evidence
+              .singleWhere(
+                (evidence) => evidence.field == RecognitionField.pickupCode,
+              )
+              .ruleId,
+          'pickup_code.app_card_context',
+          reason: arrival,
+        );
+        final courierEvidence = draft.evidence.singleWhere(
+          (evidence) => evidence.field == RecognitionField.courierCompany,
+        );
+        expect(courierEvidence.kind, RecognitionEvidenceKind.direct);
+        expect(
+          courierEvidence.source,
+          RecognitionEvidenceSource.explicitCourierName,
+        );
+      }
+    });
+
+    test('recognizes an app card with the confirmed operation cue', () {
+      final draft = PickupParser.parse('''600-3-8599
+极兔速递
+找人帮取''');
+
+      expect(draft.pickupCode, '600-3-8599');
+      expect(draft.courierCompany, CourierCompany.jtexpress);
+      expect(draft.trackingNumber, isNull);
+    });
+
+    test('does not promote a bare three-part code without app card cues', () {
+      final draft = PickupParser.parse('订单编号\n600-3-8599\n商品信息');
+
+      expect(draft.pickupCode, isNull);
+    });
+
+    test('recognizes two app cards with local tracking and YT fallback', () {
+      const rawText = '''
+天津商业大学新菜乌驿站
+28-2-4367
+今日到品
+单号添加
+回通 YT8897917364367
+还有包裹未显示？查询取件码
+实景找包裹
+好友代取
+跑腿送货
+临时场地1|校内申通快递
+申通
+519-3-9180
+今日期品
+单号添加
+申通 777440538750180
+好友代取
+跑腿送货
+''';
+
+      final drafts = PickupParser.parseAll(rawText);
+
+      expect(drafts, hasLength(2));
+      expect(drafts.map((draft) => draft.pickupCode), [
+        '28-2-4367',
+        '519-3-9180',
+      ]);
+      expect(drafts[0].courierCompany, CourierCompany.yto);
+      expect(drafts[0].trackingNumber, 'YT8897917364367');
+      expect(drafts[1].courierCompany, CourierCompany.sto);
+      expect(drafts[1].trackingNumber, '777440538750180');
+      expect(
+        drafts.every((draft) => draft.status == PickupStatus.pending),
+        isTrue,
+      );
+      final inferredCourier = drafts[0].evidence.singleWhere(
+        (evidence) => evidence.field == RecognitionField.courierCompany,
+      );
+      expect(inferredCourier.kind, RecognitionEvidenceKind.inferred);
+      expect(inferredCourier.ruleId, 'courier.tracking_prefix.yt');
+      expect(
+        inferredCourier.source,
+        RecognitionEvidenceSource.trackingPrefixRule,
+      );
+      expect(inferredCourier.matchedText, 'YT8897917364367');
+    });
+
+    test('does not promote a bare app-shaped code without card context', () {
+      final draft = PickupParser.parse('订单备注\n519-3-9180\n谢谢');
+
+      expect(draft.pickupCode, isNull);
+    });
+
+    test('does not promote a phone-shaped three-segment number', () {
+      final draft = PickupParser.parse('联系电话\n170-2950-0940\n好友代取');
+
+      expect(draft.pickupCode, isNull);
+    });
+
+    test('explicit courier wins over YT tracking-prefix inference', () {
+      final draft = PickupParser.parse('''
+申通
+519-3-9180
+今日到站
+申通 YT8897917364367
+''');
+
+      expect(draft.courierCompany, CourierCompany.sto);
+      expect(
+        draft.evidence
+            .where(
+              (evidence) => evidence.field == RecognitionField.courierCompany,
+            )
+            .single
+            .kind,
+        RecognitionEvidenceKind.direct,
+      );
+    });
+
+    test('same app code from explicit and app-card rules is deduplicated', () {
+      final draft = PickupParser.parse('''
+取件码为519-3-9180
+今日到站
+好友代取
+''');
+
+      expect(draft.pickupCode, '519-3-9180');
+      expect(draft.conflicts, isEmpty);
+      expect(
+        draft.evidence
+            .where((evidence) => evidence.field == RecognitionField.pickupCode)
+            .single
+            .ruleId,
+        'pickup_code.explicit_keyword',
       );
     });
   });

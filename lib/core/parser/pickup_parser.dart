@@ -1,7 +1,32 @@
+// Legacy helper methods remain below for compatibility with existing parser
+// fixtures; recognition itself is now owned by the rule registry.
+// ignore_for_file: unused_element
+
 import 'package:packagehub/models/pickup_credential_draft.dart';
-import 'package:packagehub/map/station_pickup_rules.dart';
+import 'package:packagehub/recognition/recognition_evidence.dart';
+import 'package:packagehub/recognition/recognition_candidate.dart';
+import 'package:packagehub/recognition/recognition_candidate_resolver.dart';
+import 'package:packagehub/recognition/recognition_context.dart';
+import 'package:packagehub/recognition/recognition_rule_registry.dart';
+import 'package:packagehub/recognition/pickup_code_anchor.dart';
+import 'package:packagehub/recognition/credential_segmenter.dart';
+import 'package:packagehub/recognition/diagnostics/recognition_diagnostic_report.dart';
+
+class RecognitionParseResult {
+  final List<PickupCredentialDraft> drafts;
+  final RecognitionDiagnosticReport diagnostics;
+
+  const RecognitionParseResult({
+    required this.drafts,
+    required this.diagnostics,
+  });
+}
 
 class PickupParser {
+  static final RecognitionRuleRegistry ruleRegistry =
+      RecognitionRuleRegistry.defaultRegistry();
+  static const RecognitionCandidateResolver _resolver =
+      RecognitionCandidateResolver();
   static const List<String> _pickupCodeKeywords = [
     '取件码',
     '取货码',
@@ -22,15 +47,6 @@ class PickupParser {
     '丰巢',
     '兔喜',
     '驿站',
-  ];
-
-  static const List<String> _pendingKeywords = [
-    '待取',
-    '待领取',
-    '请取件',
-    '取件码',
-    '凭取件码',
-    '自提',
   ];
 
   static final List<_CourierPattern> _courierPatterns = [
@@ -77,29 +93,308 @@ class PickupParser {
   static final RegExp _orderNumberContextPattern = RegExp(r'订单编号|订单号');
   static final RegExp _phoneContextPattern = RegExp(r'手机号|联系电话|电话');
 
+  /// Legacy single-result convenience API. Production OCR uses [parseAll].
+  /// It intentionally preserves Milestone 2 conflict semantics for compact
+  /// text containing competing pickup-code candidates.
   static PickupCredentialDraft parse(String rawText) {
+    return _parseContext(rawText, rawText);
+  }
+
+  static List<PickupCredentialDraft> parseAll(String rawText) {
+    return _parseAll(rawText).drafts;
+  }
+
+  /// Runs the production parser once while collecting an in-memory,
+  /// metadata-only trace for development and regression tests.
+  static RecognitionParseResult parseAllWithDiagnostics(String rawText) {
+    final normalizedText = normalizeText(rawText);
+    final collector = RecognitionDiagnosticCollector(
+      rawText.length,
+      rawText.split(RegExp(r'\r?\n')).length,
+      normalizedText,
+    );
+    final drafts = _parseAll(rawText, collector: collector).drafts;
+    return RecognitionParseResult(
+      drafts: drafts,
+      diagnostics: collector.build(),
+    );
+  }
+
+  static RecognitionParseResult _parseAll(
+    String rawText, {
+    RecognitionDiagnosticCollector? collector,
+  }) {
     final normalizedText = normalizeText(rawText);
     final lines = normalizedText
         .split('\n')
         .where((line) => line.isNotEmpty)
         .toList();
-    final pickupCodeResult = _parsePickupCode(normalizedText, lines);
-    final pickupCode = pickupCodeResult?.code;
-    final courierResult = _parseCourierCompany(lines);
-    final courierCompany =
-        courierResult?.company ??
-        StationPickupRules.resolveCourierFromPickupCode(pickupCode) ??
-        CourierCompany.unknown;
-
-    return PickupCredentialDraft(
-      courierCompany: courierCompany,
-      trackingNumber: _parseTrackingNumber(lines, courierResult),
-      pickupCode: pickupCode,
-      stationName: _parseStationName(lines, pickupCodeResult?.lineIndex),
-      status: _parseStatus(normalizedText, pickupCode),
-      sourcePlatform: _parsePlatform(normalizedText),
-      rawText: normalizedText,
+    final context = RecognitionContext(
+      rawText: rawText,
+      normalizedText: normalizedText,
+      lines: lines,
     );
+    final directCandidates = [
+      for (final rule in ruleRegistry.directRules) ...rule.evaluate(context),
+    ];
+    final pickupCandidates = directCandidates
+        .where((candidate) => candidate.field == RecognitionField.pickupCode)
+        .toList();
+    final anchors = _discoverAnchors(normalizedText, pickupCandidates);
+    collector?.recordAnchors(anchors);
+    if (anchors.length < 2 || _isCompactConflict(anchors)) {
+      if (anchors.isNotEmpty) {
+        collector?.recordSegments(
+          const CredentialSegmenter().segment(normalizedText, lines, anchors),
+        );
+      }
+      final draft = _parseContext(
+        rawText,
+        normalizedText,
+        collector: collector,
+      );
+      return RecognitionParseResult(
+        drafts: [draft],
+        diagnostics:
+            collector?.build() ??
+            const RecognitionDiagnosticReport(
+              inputLength: 0,
+              lineCount: 0,
+              normalizedLength: 0,
+              normalizedLineCount: 0,
+              anchors: [],
+              segments: [],
+              credentials: [],
+            ),
+      );
+    }
+    final segments = const CredentialSegmenter().segment(
+      normalizedText,
+      lines,
+      anchors,
+    );
+    collector?.recordSegments(segments);
+    final uniqueCourierCandidates = directCandidates
+        .where(
+          (candidate) => candidate.field == RecognitionField.courierCompany,
+        )
+        .map((candidate) => candidate.value as CourierCompany)
+        .toSet();
+    final hasAppCardAnchors = pickupCandidates.any(
+      (candidate) => candidate.ruleId == 'pickup_code.app_card_context',
+    );
+    final sharedCourier =
+        !hasAppCardAnchors && uniqueCourierCandidates.length == 1
+        ? uniqueCourierCandidates.single
+        : null;
+    final sharedCourierCandidate = sharedCourier == null
+        ? null
+        : directCandidates.firstWhere(
+            (candidate) => candidate.field == RecognitionField.courierCompany,
+          );
+    final sharedPlatform = _parsePlatform(normalizedText);
+    final drafts = [
+      for (var i = 0; i < segments.length; i++)
+        _parseContext(
+          rawText,
+          segments[i].localText,
+          diagnosticIndex: i,
+          diagnosticAnchor: segments[i].anchor.value,
+          collector: collector,
+          forcedPickup: segments[i].anchor.candidate,
+          sharedCourier: sharedCourier,
+          sharedCourierCandidate: sharedCourierCandidate,
+          sharedPlatform: sharedPlatform,
+        ),
+    ];
+    return RecognitionParseResult(
+      drafts: drafts,
+      diagnostics:
+          collector?.build() ??
+          const RecognitionDiagnosticReport(
+            inputLength: 0,
+            lineCount: 0,
+            normalizedLength: 0,
+            normalizedLineCount: 0,
+            anchors: [],
+            segments: [],
+            credentials: [],
+          ),
+    );
+  }
+
+  static PickupCredentialDraft _parseContext(
+    String rawText,
+    String text, {
+    RecognitionCandidate? forcedPickup,
+    CourierCompany? sharedCourier,
+    RecognitionCandidate? sharedCourierCandidate,
+    PackagePlatform? sharedPlatform,
+    RecognitionDiagnosticCollector? collector,
+    int? diagnosticIndex,
+    String? diagnosticAnchor,
+  }) {
+    final normalizedText = normalizeText(text);
+    final lines = normalizedText
+        .split('\n')
+        .where((line) => line.isNotEmpty)
+        .toList();
+    final context = RecognitionContext(
+      rawText: rawText,
+      normalizedText: normalizedText,
+      lines: lines,
+    );
+    final directCandidates = [
+      for (final rule in ruleRegistry.directRules)
+        ...(collector?.evaluate(rule, context) ?? rule.evaluate(context)),
+    ];
+    final forcedCandidates = forcedPickup == null
+        ? const <RecognitionCandidate>[]
+        : [forcedPickup];
+    final scopedCandidates = forcedPickup == null
+        ? directCandidates
+        : [
+            ...forcedCandidates,
+            ...directCandidates.where(
+              (candidate) =>
+                  candidate.field != RecognitionField.pickupCode &&
+                  (candidate.field != RecognitionField.trackingNumber ||
+                      _candidateOffset(normalizedText, candidate) >=
+                          _candidateOffset(normalizedText, forcedPickup)),
+            ),
+          ];
+    final directResolution = _resolver.resolve(scopedCandidates);
+    final pickupCandidate =
+        directResolution.winners[RecognitionField.pickupCode];
+    final directCourier =
+        directResolution.winners[RecognitionField.courierCompany];
+    final inferenceCandidates = directCourier == null && sharedCourier == null
+        ? [
+            for (final rule in ruleRegistry.inferenceRules)
+              ...(collector?.evaluate(
+                    rule,
+                    RecognitionContext(
+                      rawText: rawText,
+                      normalizedText: normalizedText,
+                      lines: lines,
+                      currentPickupCode: pickupCandidate?.value as String?,
+                    ),
+                  ) ??
+                  rule.evaluate(
+                    RecognitionContext(
+                      rawText: rawText,
+                      normalizedText: normalizedText,
+                      lines: lines,
+                      currentPickupCode: pickupCandidate?.value as String?,
+                    ),
+                  )),
+          ]
+        : const <RecognitionCandidate>[];
+    final inferenceResolution = _resolver.resolve(inferenceCandidates);
+    final allWinners = {
+      ...directResolution.winners,
+      ...inferenceResolution.winners,
+    };
+    if (directCourier == null && sharedCourierCandidate != null) {
+      allWinners[RecognitionField.courierCompany] = sharedCourierCandidate;
+    }
+    final evidence = [
+      for (final candidate in allWinners.values) candidate.toEvidence(),
+    ];
+    final pickupCode = pickupCandidate?.value as String?;
+    final courierCompany =
+        (directCourier?.value ??
+                sharedCourier ??
+                inferenceResolution
+                    .winners[RecognitionField.courierCompany]
+                    ?.value ??
+                CourierCompany.unknown)
+            as CourierCompany;
+    final trackingNumber =
+        allWinners[RecognitionField.trackingNumber]?.value as String?;
+    final draft = PickupCredentialDraft(
+      courierCompany: courierCompany,
+      trackingNumber: trackingNumber,
+      pickupCode: pickupCode,
+      stationName: _parseStationName(
+        lines,
+        pickupCandidate?.matchedText == null
+            ? null
+            : _lineIndexAt(
+                normalizedText,
+                normalizedText.indexOf(pickupCandidate!.matchedText!),
+              ),
+      ),
+      // A logistics status in OCR cannot prove that the user collected the
+      // parcel. New credentials always enter PackageHub as pending.
+      status: PickupStatus.pending,
+      sourcePlatform: sharedPlatform ?? _parsePlatform(normalizedText),
+      rawText: normalizedText,
+      evidence: evidence,
+      conflicts: [
+        ...directResolution.conflicts,
+        ...inferenceResolution.conflicts,
+      ],
+    );
+    collector?.recordCredential(
+      diagnosticIndex ?? 0,
+      diagnosticAnchor,
+      [...directCandidates, ...inferenceCandidates],
+      allWinners,
+      [...directResolution.conflicts, ...inferenceResolution.conflicts],
+      draft,
+    );
+    return draft;
+  }
+
+  static List<PickupCodeAnchor> _discoverAnchors(
+    String text,
+    List<RecognitionCandidate> candidates,
+  ) {
+    final result = <PickupCodeAnchor>[];
+    final usedValues = <String>{};
+    final cursors = <String, int>{};
+    for (final candidate in candidates) {
+      final value = candidate.value as String;
+      if (!usedValues.add(value)) continue;
+      final matched = candidate.matchedText ?? value;
+      final cursor = cursors[matched] ?? 0;
+      final found = text.indexOf(matched, cursor);
+      final start = found < 0 ? text.indexOf(value) : found;
+      if (start < 0) continue;
+      cursors[matched] = start + matched.length;
+      result.add(
+        PickupCodeAnchor(
+          value: value,
+          startOffset: start,
+          endOffset: start + matched.length,
+          lineIndex: _lineIndexAt(text, start),
+          ruleId: candidate.ruleId,
+          priority: candidate.priority,
+          matchedText: candidate.matchedText,
+          candidate: candidate,
+        ),
+      );
+    }
+    result.sort((a, b) => a.startOffset.compareTo(b.startOffset));
+    return result;
+  }
+
+  static int _candidateOffset(String text, RecognitionCandidate candidate) {
+    final matched = candidate.matchedText;
+    if (matched == null) return text.length;
+    return text.indexOf(matched);
+  }
+
+  static bool _isCompactConflict(List<PickupCodeAnchor> anchors) {
+    if (anchors.length < 2) return false;
+    for (var i = 1; i < anchors.length; i++) {
+      final previous = anchors[i - 1];
+      final current = anchors[i];
+      if (previous.lineIndex != current.lineIndex) return false;
+      if (current.startOffset - previous.endOffset > 24) return false;
+    }
+    return true;
   }
 
   static String normalizeText(String rawText) {
@@ -151,6 +446,8 @@ class PickupParser {
         return _PickupCodeResult(
           normalizedCode,
           _lineIndexAt(normalizedText, explicitMatch!.start),
+          ruleId: 'pickup_code.explicit_keyword',
+          matchedText: explicitMatch.group(0),
         );
       }
     }
@@ -165,6 +462,8 @@ class PickupParser {
         return _PickupCodeResult(
           normalizedCode,
           _lineIndexAt(normalizedText, credentialMatch!.start),
+          ruleId: 'pickup_code.after_ping',
+          matchedText: credentialMatch.group(0),
         );
       }
     }
@@ -187,7 +486,12 @@ class PickupParser {
 
       final normalizedCode = normalizePickupCode(candidate);
       if (_isValidPickupCode(normalizedCode)) {
-        return _PickupCodeResult(normalizedCode, i);
+        return _PickupCodeResult(
+          normalizedCode,
+          i,
+          ruleId: 'pickup_code.explicit_keyword',
+          matchedText: match.group(0),
+        );
       }
     }
 
@@ -350,14 +654,6 @@ class PickupParser {
     return trackingNumber;
   }
 
-  static PickupStatus _parseStatus(String text, String? pickupCode) {
-    if (pickupCode != null && _containsAny(text, _pendingKeywords)) {
-      return PickupStatus.pending;
-    }
-
-    return PickupStatus.unknown;
-  }
-
   static String normalizePickupCode(String code) {
     final normalizedCode = code
         .trim()
@@ -405,8 +701,15 @@ class PickupParser {
 class _PickupCodeResult {
   final String code;
   final int lineIndex;
+  final String ruleId;
+  final String? matchedText;
 
-  const _PickupCodeResult(this.code, this.lineIndex);
+  const _PickupCodeResult(
+    this.code,
+    this.lineIndex, {
+    required this.ruleId,
+    this.matchedText,
+  });
 }
 
 class _CourierPattern {
@@ -432,6 +735,8 @@ class _CourierResult {
   final CourierCompany company;
   final int lineIndex;
   final String matchedKeyword;
+
+  String get matchedText => matchedKeyword;
 
   const _CourierResult(this.company, this.lineIndex, this.matchedKeyword);
 }

@@ -114,7 +114,11 @@ Future<void> createDatabaseSchema(Database db, int version) async {
       days INTEGER NOT NULL DEFAULT 3
     )
   ''');
-  await db.insert('pickup_reminder_settings', {'id': 1, 'enabled': 1, 'days': 3}, conflictAlgorithm: ConflictAlgorithm.replace);
+  await db.insert('pickup_reminder_settings', {
+    'id': 1,
+    'enabled': 1,
+    'days': 3,
+  }, conflictAlgorithm: ConflictAlgorithm.replace);
 }
 
 Future<void> upgradeDatabaseSchema(
@@ -133,7 +137,11 @@ Future<void> upgradeDatabaseSchema(
         days INTEGER NOT NULL DEFAULT 3
       )
     ''');
-    await db.insert('pickup_reminder_settings', {'id': 1, 'enabled': 1, 'days': 3}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('pickup_reminder_settings', {
+      'id': 1,
+      'enabled': 1,
+      'days': 3,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }
 

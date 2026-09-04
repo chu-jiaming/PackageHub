@@ -6,6 +6,7 @@ import 'package:packagehub/features/credential/pickup_credential_detail_page.dar
 import 'package:packagehub/map/pickup_zone.dart';
 import 'package:packagehub/map/pickup_zone_resolver.dart';
 import 'package:packagehub/map/station_map_definition.dart';
+import 'package:packagehub/map/station_rules_sheet.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
 import 'package:packagehub/ui/adaptive.dart';
@@ -93,6 +94,12 @@ class StationMapPageState extends State<StationMapPage> {
       appBar: AppBar(
         title: const Text('站点地图'),
         actions: [
+          IconButton(
+            key: const Key('station-rules-button'),
+            onPressed: () => showStationRulesSheet(context),
+            icon: const Icon(CupertinoIcons.list_bullet),
+            tooltip: '站点规则',
+          ),
           IconButton(
             onPressed: load,
             icon: const Icon(Icons.refresh),

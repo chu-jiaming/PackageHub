@@ -6,8 +6,23 @@ import 'package:packagehub/features/import/pickup_review_form.dart';
 import 'package:packagehub/features/import/pickup_review_item.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
 
+class PickupReviewGroup {
+  final String imagePath;
+  final List<PickupCredentialDraft> drafts;
+
+  PickupReviewGroup({
+    required this.imagePath,
+    required List<PickupCredentialDraft> drafts,
+  }) : drafts = List.of(drafts);
+
+  PickupReviewGroup copy() =>
+      PickupReviewGroup(imagePath: imagePath, drafts: drafts);
+}
+
 class BatchReviewPage extends StatefulWidget {
   final List<PickupReviewItem> items;
+  final List<PickupReviewGroup> groups;
+  final bool legacyFlat;
 
   BatchReviewPage({
     super.key,
@@ -24,30 +39,53 @@ class BatchReviewPage extends StatefulWidget {
                : '',
            draft: drafts[index],
          ),
-       );
+       ),
+       groups = [
+         for (var i = 0; i < drafts.length; i++)
+           PickupReviewGroup(
+             imagePath: imagePaths != null && i < imagePaths.length
+                 ? imagePaths[i] ?? ''
+                 : '',
+             drafts: [drafts[i]],
+           ),
+       ],
+       legacyFlat = false;
 
-  const BatchReviewPage.withItems({super.key, required this.items});
+  BatchReviewPage.withItems({super.key, required this.items})
+    : groups = [
+        for (final item in items)
+          PickupReviewGroup(imagePath: item.imagePath, drafts: [item.draft]),
+      ],
+      legacyFlat = true;
+
+  const BatchReviewPage.withGroups({super.key, required this.groups})
+    : items = const [],
+      legacyFlat = false;
 
   @override
   State<BatchReviewPage> createState() => _BatchReviewPageState();
 }
 
 class _BatchReviewPageState extends State<BatchReviewPage> {
-  late List<PickupReviewItem> _items;
+  late List<PickupReviewGroup> _groups;
   int? _editingIndex;
 
   @override
   void initState() {
     super.initState();
-    _items = List.of(widget.items);
-    if (_items.length == 1) {
+    _groups = widget.groups.map((group) => group.copy()).toList();
+    if (_groups.length == 1 && _groups.single.drafts.length == 1) {
       _editingIndex = 0;
     }
   }
 
-  void _updateDraft(int index, PickupCredentialDraft draft) {
+  void _updateDraft(
+    int groupIndex,
+    int draftIndex,
+    PickupCredentialDraft draft,
+  ) {
     setState(() {
-      _items[index] = _items[index].copyWith(draft: draft);
+      _groups[groupIndex].drafts[draftIndex] = draft;
     });
   }
 
@@ -67,6 +105,12 @@ class _BatchReviewPageState extends State<BatchReviewPage> {
     });
   }
 
+  void _removeDraft(int groupIndex, int draftIndex) {
+    setState(() {
+      _groups[groupIndex].drafts.removeAt(draftIndex);
+    });
+  }
+
   Future<void> _previewImage(String imagePath) async {
     if (imagePath.isEmpty) {
       return;
@@ -80,9 +124,9 @@ class _BatchReviewPageState extends State<BatchReviewPage> {
   }
 
   void _confirmAll() {
-    Navigator.of(context).pop<List<PickupCredentialDraft>>(
-      _items.map((item) => item.draft).toList(),
-    );
+    Navigator.of(context).pop<List<PickupCredentialDraft>>([
+      for (final group in _groups) ...group.drafts,
+    ]);
   }
 
   @override
@@ -99,12 +143,13 @@ class _BatchReviewPageState extends State<BatchReviewPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${_items.length} 个识别结果',
+              '${_groups.fold<int>(0, (sum, group) => sum + group.drafts.length)} 个识别结果',
               key: const Key('batchReviewCountText'),
               style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 18),
-            if (_items.isEmpty)
+            if (_groups.isEmpty ||
+                _groups.every((group) => group.drafts.isEmpty))
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
@@ -117,18 +162,44 @@ class _BatchReviewPageState extends State<BatchReviewPage> {
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
               )
-            else
-              for (var index = 0; index < _items.length; index++) ...[
+            else if (widget.legacyFlat)
+              for (var index = 0; index < _groups.length; index++) ...[
                 _BatchReviewCard(
                   key: Key('batchReviewItem_$index'),
-                  item: _items[index],
+                  item: PickupReviewItem(
+                    imagePath: _groups[index].imagePath,
+                    draft: _groups[index].drafts.single,
+                  ),
                   index: index,
                   isEditing: _editingIndex == index,
                   onEdit: () => _editItem(index),
-                  onChanged: (draft) => _updateDraft(index, draft),
+                  onChanged: (draft) => _updateDraft(index, 0, draft),
                   onComplete: () => _finishEditing(index),
-                  onPreviewImage: () => _previewImage(_items[index].imagePath),
+                  onRemove: () => _removeDraft(index, 0),
+                  onPreviewImage: () => _previewImage(_groups[index].imagePath),
                 ),
+                const SizedBox(height: 12),
+              ]
+            else
+              for (
+                var groupIndex = 0;
+                groupIndex < _groups.length;
+                groupIndex++
+              ) ...[
+                if (_groups[groupIndex].drafts.isNotEmpty)
+                  _BatchReviewGroup(
+                    key: Key('batchReviewGroup_$groupIndex'),
+                    group: _groups[groupIndex],
+                    groupIndex: groupIndex,
+                    editingIndex: _editingIndex,
+                    onEdit: (index) => _editItem(index),
+                    onChanged: (draftIndex, draft) =>
+                        _updateDraft(groupIndex, draftIndex, draft),
+                    onComplete: _finishEditing,
+                    onRemove: (index) => _removeDraft(groupIndex, index),
+                    onPreviewImage: () =>
+                        _previewImage(_groups[groupIndex].imagePath),
+                  ),
                 const SizedBox(height: 12),
               ],
           ],
@@ -144,13 +215,80 @@ class _BatchReviewPageState extends State<BatchReviewPage> {
               width: double.infinity,
               child: FilledButton(
                 key: const Key('confirmAllButton'),
-                onPressed: _items.isEmpty ? null : _confirmAll,
+                onPressed: _groups.every((group) => group.drafts.isEmpty)
+                    ? null
+                    : _confirmAll,
                 child: const Text('确认全部'),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _BatchReviewGroup extends StatelessWidget {
+  final PickupReviewGroup group;
+  final int groupIndex;
+  final int? editingIndex;
+  final ValueChanged<int> onEdit;
+  final void Function(int, PickupCredentialDraft) onChanged;
+  final ValueChanged<int> onComplete;
+  final ValueChanged<int> onRemove;
+  final VoidCallback onPreviewImage;
+
+  const _BatchReviewGroup({
+    super.key,
+    required this.group,
+    required this.groupIndex,
+    required this.editingIndex,
+    required this.onEdit,
+    required this.onChanged,
+    required this.onComplete,
+    required this.onRemove,
+    required this.onPreviewImage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    var base = 0;
+    final parent = context.findAncestorStateOfType<_BatchReviewPageState>();
+    if (parent != null) {
+      for (var i = 0; i < groupIndex; i++) {
+        base += parent._groups[i].drafts.length;
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ReviewScreenshotPreview(
+          key: Key('reviewGroupScreenshot_$groupIndex'),
+          imagePath: group.imagePath,
+          width: double.infinity,
+          height: 190,
+          cacheWidth: 800,
+          onTap: onPreviewImage,
+        ),
+        const SizedBox(height: 10),
+        Text('识别出 ${group.drafts.length} 个取件凭证'),
+        const SizedBox(height: 10),
+        for (var i = 0; i < group.drafts.length; i++) ...[
+          _BatchReviewCard(
+            key: Key('batchReviewItem_${base + i}'),
+            item: PickupReviewItem(imagePath: '', draft: group.drafts[i]),
+            index: base + i,
+            isEditing: editingIndex == base + i,
+            showPreview: false,
+            onEdit: () => onEdit(base + i),
+            onChanged: (draft) => onChanged(i, draft),
+            onComplete: () => onComplete(base + i),
+            onRemove: () => onRemove(i),
+            onPreviewImage: onPreviewImage,
+          ),
+          const SizedBox(height: 12),
+        ],
+      ],
     );
   }
 }
@@ -163,6 +301,8 @@ class _BatchReviewCard extends StatelessWidget {
   final ValueChanged<PickupCredentialDraft> onChanged;
   final VoidCallback onComplete;
   final VoidCallback onPreviewImage;
+  final bool showPreview;
+  final VoidCallback? onRemove;
 
   const _BatchReviewCard({
     super.key,
@@ -173,6 +313,8 @@ class _BatchReviewCard extends StatelessWidget {
     required this.onChanged,
     required this.onComplete,
     required this.onPreviewImage,
+    this.showPreview = true,
+    this.onRemove,
   });
 
   @override
@@ -194,14 +336,15 @@ class _BatchReviewCard extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ReviewScreenshotPreview(
-          key: Key('reviewScreenshot_$index'),
-          imagePath: item.imagePath,
-          width: 116,
-          height: 178,
-          cacheWidth: 420,
-          onTap: onPreviewImage,
-        ),
+        if (showPreview)
+          _ReviewScreenshotPreview(
+            key: Key('reviewScreenshot_$index'),
+            imagePath: item.imagePath,
+            width: 116,
+            height: 178,
+            cacheWidth: 420,
+            onTap: onPreviewImage,
+          ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
@@ -234,6 +377,15 @@ class _BatchReviewCard extends StatelessWidget {
                   child: const Text('编辑'),
                 ),
               ),
+              if (onRemove != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    key: Key('removeDraftButton_$index'),
+                    onPressed: onRemove,
+                    child: const Text('移除'),
+                  ),
+                ),
             ],
           ),
         ),
@@ -245,14 +397,15 @@ class _BatchReviewCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ReviewScreenshotPreview(
-          key: Key('reviewScreenshot_$index'),
-          imagePath: item.imagePath,
-          height: 260,
-          width: double.infinity,
-          cacheWidth: 800,
-          onTap: onPreviewImage,
-        ),
+        if (showPreview)
+          _ReviewScreenshotPreview(
+            key: Key('reviewScreenshot_$index'),
+            imagePath: item.imagePath,
+            height: 260,
+            width: double.infinity,
+            cacheWidth: 800,
+            onTap: onPreviewImage,
+          ),
         const SizedBox(height: 18),
         PickupReviewForm(
           key: ValueKey('pickupReviewForm_$index'),

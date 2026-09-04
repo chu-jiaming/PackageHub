@@ -5,28 +5,28 @@ enum BatchImportStatus { pending, recognizing, success, failed }
 class BatchImportItem {
   final String imagePath;
   final BatchImportStatus status;
-  final PickupCredentialDraft? draft;
+  final List<PickupCredentialDraft> drafts;
   final String? errorMessage;
 
   const BatchImportItem({
     required this.imagePath,
     this.status = BatchImportStatus.pending,
-    this.draft,
+    this.drafts = const [],
     this.errorMessage,
   });
 
   BatchImportItem copyWith({
     String? imagePath,
     BatchImportStatus? status,
-    PickupCredentialDraft? draft,
+    List<PickupCredentialDraft>? drafts,
     String? errorMessage,
-    bool clearDraft = false,
+    bool clearDrafts = false,
     bool clearErrorMessage = false,
   }) {
     return BatchImportItem(
       imagePath: imagePath ?? this.imagePath,
       status: status ?? this.status,
-      draft: clearDraft ? null : draft ?? this.draft,
+      drafts: clearDrafts ? const [] : drafts ?? this.drafts,
       errorMessage: clearErrorMessage
           ? null
           : errorMessage ?? this.errorMessage,

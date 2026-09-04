@@ -55,7 +55,7 @@ class _PickupReviewPageState extends State<PickupReviewPage> {
             const SizedBox(height: 22),
             PickupReviewForm(
               draft: _draft,
-              onChanged: (draft) => _draft = draft,
+              onChanged: (draft) => setState(() => _draft = draft),
               onComplete: _confirm,
               completeButtonLabel: '确认信息',
               completeButtonKey: const Key('confirmPickupButton'),

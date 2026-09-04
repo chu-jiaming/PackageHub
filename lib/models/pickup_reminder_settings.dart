@@ -5,5 +5,8 @@ class PickupReminderSettings {
   const PickupReminderSettings({this.enabled = true, this.days = 3});
 
   PickupReminderSettings copyWith({bool? enabled, int? days}) =>
-      PickupReminderSettings(enabled: enabled ?? this.enabled, days: days ?? this.days);
+      PickupReminderSettings(
+        enabled: enabled ?? this.enabled,
+        days: days ?? this.days,
+      );
 }

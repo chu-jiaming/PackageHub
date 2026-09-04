@@ -11,9 +11,15 @@ class PickupReminderService {
     DateTime? now,
   }) {
     if (!settings.enabled) return [];
-    final cutoff = (now ?? DateTime.now()).subtract(Duration(days: settings.days));
-    return credentials.where((credential) =>
-        credential.status == PickupStatus.pending &&
-        !credential.createdAt.isAfter(cutoff)).toList();
+    final cutoff = (now ?? DateTime.now()).subtract(
+      Duration(days: settings.days),
+    );
+    return credentials
+        .where(
+          (credential) =>
+              credential.status == PickupStatus.pending &&
+              !credential.createdAt.isAfter(cutoff),
+        )
+        .toList();
   }
 }

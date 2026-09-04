@@ -9,6 +9,7 @@ import 'package:packagehub/features/credential/pickup_credential_detail_page.dar
 import 'package:packagehub/features/home/credential_grouping.dart';
 import 'package:packagehub/features/import/batch_import_page.dart';
 import 'package:packagehub/features/import/duplicate_review_page.dart';
+import 'package:packagehub/features/import/batch_review_page.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
 import 'package:packagehub/ui/adaptive.dart';
@@ -20,12 +21,28 @@ import 'package:packagehub/core/reminder/pickup_notification_service.dart';
 import 'package:packagehub/models/pickup_reminder_settings.dart';
 import 'package:packagehub/map/station_map_page.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:packagehub/account/account_hub.dart';
+import 'package:packagehub/account/account_repository.dart';
+import 'package:packagehub/account/mock_account_repository.dart';
+import 'package:packagehub/account/account_api_client.dart';
+import 'package:packagehub/account/real_account_repository.dart';
+import 'package:packagehub/subscription/mock_subscription_repository.dart';
+import 'package:packagehub/subscription/subscription_repository.dart';
+import 'package:packagehub/subscription/entitlement_pro_feature_access.dart';
+import 'package:packagehub/subscription/pro_feature.dart';
+import 'package:packagehub/subscription/pro_feature_access.dart';
+import 'package:packagehub/subscription/pro_upgrade_sheet.dart';
 
 void main() {
   final database = PackageHubDatabase.instance;
   final repository = PickupCredentialRepository(database);
 
-  runApp(PackageHubApp(repository: repository));
+  const baseUrl = String.fromEnvironment('PACKAGEHUB_API_BASE_URL');
+  final account = RealAccountRepository(
+    api: baseUrl.isEmpty ? null : AccountApiClient(baseUrl),
+  );
+  account.restoreSession();
+  runApp(PackageHubApp(repository: repository, accountRepository: account));
 }
 
 typedef ImagePathPicker = Future<List<String>> Function();
@@ -38,8 +55,15 @@ Future<List<String>> pickGalleryImagePaths() async {
 
 class PackageHubApp extends StatelessWidget {
   final PickupCredentialRepositoryApi repository;
+  final AccountRepository accountRepository;
+  final SubscriptionRepository subscriptionRepository;
 
-  const PackageHubApp({super.key, required this.repository});
+  const PackageHubApp({
+    super.key,
+    required this.repository,
+    this.accountRepository = const MockAccountRepository(),
+    this.subscriptionRepository = const MockSubscriptionRepository(),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +89,12 @@ class PackageHubApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF000000),
       ),
       themeMode: ThemeMode.system,
-      home: PackageHubShell(repository: repository),
+      home: PackageHubShell(
+        repository: repository,
+        accountRepository: accountRepository,
+        subscriptionRepository: subscriptionRepository,
+        proFeatureAccess: EntitlementProFeatureAccess(subscriptionRepository),
+      ),
     );
   }
 }
@@ -73,11 +102,17 @@ class PackageHubApp extends StatelessWidget {
 class PackageHubShell extends StatefulWidget {
   final PickupCredentialRepositoryApi repository;
   final IdentityLauncherApi? identityLauncher;
+  final AccountRepository accountRepository;
+  final SubscriptionRepository subscriptionRepository;
+  final ProFeatureAccess? proFeatureAccess;
 
   const PackageHubShell({
     super.key,
     required this.repository,
     this.identityLauncher,
+    this.accountRepository = const MockAccountRepository(),
+    this.subscriptionRepository = const MockSubscriptionRepository(),
+    this.proFeatureAccess,
   });
 
   @override
@@ -86,6 +121,7 @@ class PackageHubShell extends StatefulWidget {
 
 class _PackageHubShellState extends State<PackageHubShell> {
   int _index = 0;
+  bool _accountHubOpen = false;
   final _homeKey = GlobalKey<_HomePageState>();
   final _mapKey = GlobalKey<StationMapPageState>();
 
@@ -100,32 +136,51 @@ class _PackageHubShellState extends State<PackageHubShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: [
-          HomePage(key: _homeKey, repository: widget.repository),
-          StationMapPage(key: _mapKey, repository: widget.repository),
-          IdentityHubPage(
-            launcher: widget.identityLauncher ?? IdentityLauncher(),
+    return Stack(
+      children: [
+        Scaffold(
+          body: IndexedStack(
+            index: _index,
+            children: [
+              HomePage(
+                key: _homeKey,
+                repository: widget.repository,
+                onAccountTap: () => setState(() => _accountHubOpen = true),
+                proFeatureAccess: widget.proFeatureAccess,
+                subscriptionRepository: widget.subscriptionRepository,
+              ),
+              StationMapPage(key: _mapKey, repository: widget.repository),
+              IdentityHubPage(
+                launcher: widget.identityLauncher ?? IdentityLauncher(),
+              ),
+            ],
           ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _selectTab,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            label: '取件',
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _index,
+            onDestinationSelected: _selectTab,
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.inventory_2_outlined),
+                label: '取件',
+              ),
+              NavigationDestination(
+                icon: Icon(CupertinoIcons.map),
+                label: '地图',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.qr_code_2_outlined),
+                label: '身份码',
+              ),
+            ],
           ),
-          NavigationDestination(icon: Icon(CupertinoIcons.map), label: '地图'),
-          NavigationDestination(
-            icon: Icon(Icons.qr_code_2_outlined),
-            label: '身份码',
+        ),
+        if (_accountHubOpen)
+          AccountHub(
+            accountRepository: widget.accountRepository,
+            subscriptionRepository: widget.subscriptionRepository,
+            onDismiss: () => setState(() => _accountHubOpen = false),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -134,12 +189,18 @@ class HomePage extends StatefulWidget {
   final PickupCredentialRepositoryApi repository;
   final ImagePathPicker? imagePathPicker;
   final ImportPageBuilder? importPageBuilder;
+  final VoidCallback? onAccountTap;
+  final ProFeatureAccess? proFeatureAccess;
+  final SubscriptionRepository? subscriptionRepository;
 
   const HomePage({
     super.key,
     required this.repository,
     this.imagePathPicker,
     this.importPageBuilder,
+    this.onAccountTap,
+    this.proFeatureAccess,
+    this.subscriptionRepository,
   });
 
   @override
@@ -162,6 +223,8 @@ class _HomePageState extends State<HomePage> {
   final _reminderService = const PickupReminderService();
   final _notificationService = PickupNotificationService();
 
+  ProFeatureAccess? get _proAccess => widget.proFeatureAccess;
+
   @override
   void initState() {
     super.initState();
@@ -180,7 +243,8 @@ class _HomePageState extends State<HomePage> {
     try {
       final credentials = await widget.repository.getAll();
       final reminderSettings = widget.repository is PickupCredentialRepository
-          ? await (widget.repository as PickupCredentialRepository).getReminderSettings()
+          ? await (widget.repository as PickupCredentialRepository)
+                .getReminderSettings()
           : const PickupReminderSettings();
       if (mounted) {
         setState(() {
@@ -209,9 +273,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> _openReminderSettings() async {
     final repository = widget.repository;
     if (repository is! PickupCredentialRepository) return;
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => PickupReminderSettingsPage(repository: repository),
-    ));
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PickupReminderSettingsPage(repository: repository),
+      ),
+    );
     await _loadCredentials();
   }
 
@@ -285,10 +351,36 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _markPending(PickupCredential credential) async {
+    final limit = _proAccess?.activeCredentialLimit;
+    if (limit != null && await _activeCredentialCount() >= limit) {
+      await _showActiveLimitUpsell();
+      return;
+    }
     await _runLifecycleAction(
       credential,
       () => widget.repository.markPending(credential.id!),
       successMessage: '已恢复为待取件',
+    );
+  }
+
+  Future<int> _activeCredentialCount() async {
+    final repository = widget.repository;
+    if (repository is PickupCredentialRepository) {
+      return repository.countActiveCredentials();
+    }
+    return (await repository.getAll())
+        .where((item) => item.status != PickupStatus.pickedUp)
+        .length;
+  }
+
+  Future<void> _showActiveLimitUpsell() async {
+    final subscriptionRepository = widget.subscriptionRepository;
+    if (subscriptionRepository == null) return;
+    await showProUpgradeSheet(
+      context,
+      subscriptionRepository: subscriptionRepository,
+      title: '管理更多取件凭证',
+      body: 'PackageHub Free 最多可同时管理 3 个待取件凭证。\n\nPro：无限管理待取件凭证。',
     );
   }
 
@@ -421,6 +513,38 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
+    final limit = _proAccess?.activeCredentialLimit;
+    if (limit != null) {
+      final currentActiveCount = await _activeCredentialCount();
+      final newActiveCount = drafts
+          .where((draft) => draft.status != PickupStatus.pickedUp)
+          .length;
+      if (currentActiveCount + newActiveCount > limit) {
+        final subscriptionRepository = widget.subscriptionRepository;
+        if (subscriptionRepository == null) return;
+        if (!mounted) return;
+        final openedPro = await showProUpgradeSheet(
+          context,
+          subscriptionRepository: subscriptionRepository,
+          title: '管理更多取件凭证',
+          body:
+              'PackageHub Free 最多可同时管理 3 个待取件凭证。\n'
+              '当前已有 $currentActiveCount 个，本次将新增 $newActiveCount 个。',
+        );
+        if (!mounted) return;
+        if (!openedPro) {
+          final revised = await Navigator.of(context)
+              .push<List<PickupCredentialDraft>>(
+                MaterialPageRoute(
+                  builder: (_) => BatchReviewPage(drafts: drafts),
+                ),
+              );
+          if (revised != null && revised.isNotEmpty) await _saveDrafts(revised);
+        }
+        return;
+      }
+    }
+
     setState(() {
       _isSaving = true;
       _saveErrorMessage = null;
@@ -484,6 +608,20 @@ class _HomePageState extends State<HomePage> {
 
   void _enterSelectionMode([PickupCredential? credential]) {
     if (_isBatchOperating) {
+      return;
+    }
+
+    final subscriptionRepository = widget.subscriptionRepository;
+    if (_proAccess != null &&
+        !_proAccess!.canUse(ProFeature.batchManagement) &&
+        subscriptionRepository != null) {
+      showProUpgradeSheet(
+        context,
+        subscriptionRepository: subscriptionRepository,
+        title: '批量管理属于 PackageHub Pro',
+        body: '升级 Pro 后可批量标记已取件和批量删除。',
+        secondaryLabel: '取消',
+      );
       return;
     }
 
@@ -691,6 +829,22 @@ class _HomePageState extends State<HomePage> {
               child: const Text('批量操作'),
             ),
         ],
+        leading: !_isSelectionMode
+            ? Semantics(
+                button: true,
+                label: '账户',
+                child: IconButton(
+                  key: const Key('accountAvatarButton'),
+                  tooltip: '账户',
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  icon: const Icon(Icons.account_circle, size: 34),
+                  onPressed: widget.onAccountTap,
+                ),
+              )
+            : null,
       ),
       body: SafeArea(child: _buildBody()),
       bottomNavigationBar: _isSelectionMode ? _buildBatchActionBar() : null,
@@ -731,7 +885,9 @@ class _HomePageState extends State<HomePage> {
           MaterialBanner(
             key: const Key('pickupReminderBanner'),
             leading: const Icon(Icons.notifications_active_outlined),
-            content: Text('有 ${due.length} 个包裹已超过 ${_reminderSettings.days} 天未取件'),
+            content: Text(
+              '有 ${due.length} 个包裹已超过 ${_reminderSettings.days} 天未取件',
+            ),
             actions: const [SizedBox.shrink()],
           ),
         if (_saveErrorMessage != null) _buildSaveErrorBanner(),

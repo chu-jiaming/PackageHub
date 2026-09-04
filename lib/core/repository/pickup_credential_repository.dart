@@ -29,7 +29,15 @@ abstract interface class PickupCredentialRepositoryApi {
   Future<List<PickupCredential>> markPendingAll(Iterable<int> ids);
 
   Future<void> deleteAll(Iterable<int> ids);
+}
 
+/// The persistence operations used by the pickup reminder settings screen.
+abstract interface class PickupReminderSettingsRepository {
+  Future<PickupReminderSettings> getReminderSettings();
+
+  Future<void> saveReminderSettings(PickupReminderSettings settings);
+
+  Future<List<PickupCredential>> getAll();
 }
 
 /// Repository for managing pickup credential persistence.
@@ -37,7 +45,8 @@ abstract interface class PickupCredentialRepositoryApi {
 /// PackageHub v1 local persistence deliberately stores only structured
 /// pickup credential fields. Do not persist raw OCR text or imported
 /// screenshots without an explicit future product decision.
-class PickupCredentialRepository implements PickupCredentialRepositoryApi {
+class PickupCredentialRepository
+    implements PickupCredentialRepositoryApi, PickupReminderSettingsRepository {
   final PackageHubDatabase _database;
 
   PickupCredentialRepository(this._database);
@@ -45,6 +54,7 @@ class PickupCredentialRepository implements PickupCredentialRepositoryApi {
   static const _tableName = 'pickup_credentials';
   static const _settingsTableName = 'pickup_reminder_settings';
 
+  @override
   Future<PickupReminderSettings> getReminderSettings() async {
     final db = await _database.database;
     final rows = await db.query(_settingsTableName, where: 'id = 1', limit: 1);
@@ -56,6 +66,7 @@ class PickupCredentialRepository implements PickupCredentialRepositoryApi {
     );
   }
 
+  @override
   Future<void> saveReminderSettings(PickupReminderSettings settings) async {
     final db = await _database.database;
     await db.insert(_settingsTableName, {
@@ -299,6 +310,15 @@ class PickupCredentialRepository implements PickupCredentialRepositoryApi {
   Future<int> count() async {
     final db = await _database.database;
     final result = await db.rawQuery('SELECT COUNT(*) as cnt FROM $_tableName');
+    return result.first['cnt'] as int;
+  }
+
+  Future<int> countActiveCredentials() async {
+    final db = await _database.database;
+    final result = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM $_tableName WHERE status != ?",
+      [PickupStatus.pickedUp.name],
+    );
     return result.first['cnt'] as int;
   }
 

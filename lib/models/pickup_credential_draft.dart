@@ -1,3 +1,6 @@
+import 'package:packagehub/recognition/recognition_evidence.dart';
+import 'package:packagehub/recognition/recognition_conflict.dart';
+
 enum PackagePlatform { taobao, pinduoduo, jd, cainiao, unknown }
 
 enum CourierCompany {
@@ -27,6 +30,8 @@ class PickupCredentialDraft {
   final PickupStatus status;
   final PackagePlatform sourcePlatform;
   final String rawText;
+  final List<RecognitionEvidence> evidence;
+  final List<RecognitionConflict> conflicts;
 
   const PickupCredentialDraft({
     required this.courierCompany,
@@ -36,8 +41,34 @@ class PickupCredentialDraft {
     required this.status,
     required this.sourcePlatform,
     required this.rawText,
+    this.evidence = const [],
+    this.conflicts = const [],
   });
+
+  PickupCredentialDraft copyWith({
+    CourierCompany? courierCompany,
+    Object? trackingNumber = _unset,
+    Object? pickupCode = _unset,
+    List<RecognitionEvidence>? evidence,
+    List<RecognitionConflict>? conflicts,
+  }) => PickupCredentialDraft(
+    courierCompany: courierCompany ?? this.courierCompany,
+    trackingNumber: identical(trackingNumber, _unset)
+        ? this.trackingNumber
+        : trackingNumber as String?,
+    pickupCode: identical(pickupCode, _unset)
+        ? this.pickupCode
+        : pickupCode as String?,
+    stationName: stationName,
+    status: status,
+    sourcePlatform: sourcePlatform,
+    rawText: rawText,
+    evidence: evidence ?? this.evidence,
+    conflicts: conflicts ?? this.conflicts,
+  );
 }
+
+const _unset = Object();
 
 extension PackagePlatformDisplayName on PackagePlatform {
   String get displayName {
@@ -68,6 +99,21 @@ extension CourierCompanyDisplayName on CourierCompany {
       CourierCompany.bestExpress => '百世快递',
       CourierCompany.other => '其他',
       CourierCompany.unknown => '未识别快递公司',
+    };
+  }
+
+  /// Compact name used by station-facing UI surfaces.
+  String get stationDisplayName {
+    return switch (this) {
+      CourierCompany.sfExpress => '顺丰',
+      CourierCompany.yto => '圆通',
+      CourierCompany.zto => '中通',
+      CourierCompany.sto => '申通',
+      CourierCompany.yunda => '韵达',
+      CourierCompany.jtexpress => '极兔',
+      CourierCompany.ems || CourierCompany.chinaPost => '邮政',
+      CourierCompany.jdLogistics => '京东',
+      _ => displayName,
     };
   }
 }

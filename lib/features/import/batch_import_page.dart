@@ -6,7 +6,6 @@ import 'package:packagehub/core/ocr/ocr_service.dart';
 import 'package:packagehub/core/parser/pickup_parser.dart';
 import 'package:packagehub/features/import/batch_import_item.dart';
 import 'package:packagehub/features/import/batch_review_page.dart';
-import 'package:packagehub/features/import/pickup_review_item.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
 
 const int kMaxBatchImageCount = 10;
@@ -119,14 +118,14 @@ class _BatchImportPageState extends State<BatchImportPage> {
     setState(() {
       _items[index] = _items[index].copyWith(
         status: BatchImportStatus.recognizing,
-        clearDraft: true,
+        clearDrafts: true,
         clearErrorMessage: true,
       );
     });
 
     try {
       final rawText = await _ocrService.recognizeText(_items[index].imagePath);
-      final draft = PickupParser.parse(rawText);
+      final drafts = PickupParser.parseAll(rawText);
 
       if (!mounted) {
         return;
@@ -135,7 +134,7 @@ class _BatchImportPageState extends State<BatchImportPage> {
       setState(() {
         _items[index] = _items[index].copyWith(
           status: BatchImportStatus.success,
-          draft: draft,
+          drafts: drafts,
           clearErrorMessage: true,
         );
       });
@@ -148,7 +147,7 @@ class _BatchImportPageState extends State<BatchImportPage> {
         _items[index] = _items[index].copyWith(
           status: BatchImportStatus.failed,
           errorMessage: _friendlyErrorMessage(error),
-          clearDraft: true,
+          clearDrafts: true,
         );
       });
     }
@@ -176,19 +175,20 @@ class _BatchImportPageState extends State<BatchImportPage> {
     final successfulItems = _items
         .where(
           (item) =>
-              item.status == BatchImportStatus.success && item.draft != null,
+              item.status == BatchImportStatus.success &&
+              item.drafts.isNotEmpty,
         )
         .toList();
 
     final confirmedDrafts = await Navigator.of(context)
         .push<List<PickupCredentialDraft>>(
           MaterialPageRoute(
-            builder: (context) => BatchReviewPage.withItems(
-              items: successfulItems
+            builder: (context) => BatchReviewPage.withGroups(
+              groups: successfulItems
                   .map(
-                    (item) => PickupReviewItem(
+                    (item) => PickupReviewGroup(
                       imagePath: item.imagePath,
-                      draft: item.draft!,
+                      drafts: item.drafts,
                     ),
                   )
                   .toList(),
@@ -341,16 +341,18 @@ class _BatchImportCard extends StatelessWidget {
           Expanded(
             child: _BatchImportDetails(item: item, index: index),
           ),
-          if (item.status == BatchImportStatus.failed)
+          if (item.status == BatchImportStatus.failed ||
+              item.status == BatchImportStatus.success)
             Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                TextButton(
-                  key: Key('retryBatchImportItem_$index'),
-                  onPressed: isProcessingBatch ? null : onRetry,
-                  child: const Text('重新识别'),
-                ),
+                if (item.status == BatchImportStatus.failed)
+                  TextButton(
+                    key: Key('retryBatchImportItem_$index'),
+                    onPressed: isProcessingBatch ? null : onRetry,
+                    child: const Text('重新识别'),
+                  ),
                 TextButton(
                   key: Key('removeBatchImportItem_$index'),
                   onPressed: isProcessingBatch ? null : onRemove,
@@ -399,44 +401,80 @@ class _BatchImportDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final draft = item.draft;
     final statusText = _statusText(item.status);
+    final drafts = item.drafts;
+    final isMultiDraft = drafts.length > 1;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          _titleText(draft),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          statusText,
-          key: Key('batchImportStatus_$index'),
-          style: TextStyle(
-            color: item.status == BatchImportStatus.failed
-                ? Theme.of(context).colorScheme.error
-                : Colors.grey.shade700,
+    return Semantics(
+      container: true,
+      label: [
+        '第 ${index + 1} 张截图',
+        if (isMultiDraft) '识别出 ${drafts.length} 个取件凭证',
+        for (final draft in drafts)
+          '${_titleText(draft)}, 取件码 ${draft.pickupCode ?? '无取件码'}',
+      ].join('，'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isMultiDraft
+                ? '识别出 ${drafts.length} 个取件凭证'
+                : _titleText(drafts.firstOrNull),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
-        ),
-        if (item.status == BatchImportStatus.success && draft != null) ...[
-          const SizedBox(height: 6),
-          Text(draft.pickupCode ?? '取件码未识别'),
-        ],
-        if (item.status == BatchImportStatus.failed &&
-            item.errorMessage != null) ...[
           const SizedBox(height: 6),
           Text(
-            item.errorMessage!,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            statusText,
+            key: Key('batchImportStatus_$index'),
             style: TextStyle(
-              fontSize: 13,
-              color: Theme.of(context).colorScheme.error,
+              color: item.status == BatchImportStatus.failed
+                  ? Theme.of(context).colorScheme.error
+                  : Colors.grey.shade700,
             ),
           ),
+          if (item.status == BatchImportStatus.success &&
+              drafts.length == 1) ...[
+            const SizedBox(height: 8),
+            Text(drafts.single.pickupCode ?? '无取件码'),
+            if (drafts.single.trackingNumber != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                drafts.single.trackingNumber!,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
+          ],
+          if (item.status == BatchImportStatus.success &&
+              drafts.length > 1) ...[
+            const SizedBox(height: 8),
+            for (
+              var draftIndex = 0;
+              draftIndex < drafts.length;
+              draftIndex++
+            ) ...[
+              if (draftIndex > 0) ...[
+                const SizedBox(height: 8),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+              ],
+              _CredentialSummary(draft: drafts[draftIndex]),
+            ],
+          ],
+          if (item.status == BatchImportStatus.failed &&
+              item.errorMessage != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              item.errorMessage!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -463,5 +501,34 @@ class _BatchImportDetails extends StatelessWidget {
       BatchImportStatus.success => '识别成功',
       BatchImportStatus.failed => '识别失败',
     };
+  }
+}
+
+class _CredentialSummary extends StatelessWidget {
+  final PickupCredentialDraft draft;
+
+  const _CredentialSummary({required this.draft});
+
+  @override
+  Widget build(BuildContext context) {
+    final company = draft.courierCompany == CourierCompany.unknown
+        ? '未识别快递公司'
+        : draft.courierCompany.displayName;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          company,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(draft.pickupCode ?? '无取件码'),
+        if (draft.trackingNumber != null) ...[
+          const SizedBox(height: 2),
+          Text(draft.trackingNumber!, style: const TextStyle(fontSize: 13)),
+        ],
+      ],
+    );
   }
 }

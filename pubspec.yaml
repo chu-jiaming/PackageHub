@@ -41,6 +41,9 @@ dependencies:
   url_launcher: ^6.3.2
   flutter_local_notifications: ^19.4.2
   timezone: ^0.10.1
+  keyboard_actions: ^5.0.2
+  http: ^1.5.0
+  crypto: ^3.0.6
 
 dev_dependencies:
   flutter_test:
@@ -102,6 +105,6 @@ flutter:
 
 flutter_launcher_icons:
   ios: true
-  android: false
-  image_path: "assets/icon/packagehub_icon.jpeg"
+  android: true
+  image_path: "assets/icon/tjcu快取.jpg"
   remove_alpha_ios: true

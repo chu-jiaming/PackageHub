@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:packagehub/core/parser/pickup_parser.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
+import 'package:packagehub/recognition/recognition_evidence.dart';
 
 class PickupReviewForm extends StatefulWidget {
   final PickupCredentialDraft draft;
@@ -57,6 +58,18 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
     );
     final normalizedTrackingNumber = _trackingNumberController.text.trim();
 
+    final changedFields = <RecognitionField>{};
+    if ((widget.draft.pickupCode ?? '') !=
+        (normalizedPickupCode.isEmpty ? '' : normalizedPickupCode)) {
+      changedFields.add(RecognitionField.pickupCode);
+    }
+    if ((widget.draft.trackingNumber ?? '') !=
+        (normalizedTrackingNumber.isEmpty ? '' : normalizedTrackingNumber)) {
+      changedFields.add(RecognitionField.trackingNumber);
+    }
+    if (_selectedCourierCompany != widget.draft.courierCompany) {
+      changedFields.add(RecognitionField.courierCompany);
+    }
     return PickupCredentialDraft(
       courierCompany: _selectedCourierCompany,
       trackingNumber: normalizedTrackingNumber.isEmpty
@@ -67,6 +80,12 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
       status: _selectedStatus,
       sourcePlatform: widget.draft.sourcePlatform,
       rawText: widget.draft.rawText,
+      evidence: widget.draft.evidence
+          .where((e) => !changedFields.contains(e.field))
+          .toList(),
+      conflicts: widget.draft.conflicts
+          .where((conflict) => !changedFields.contains(conflict.field))
+          .toList(),
     );
   }
 
@@ -170,6 +189,8 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
           '识别来源：${widget.draft.sourcePlatform.displayName}',
           style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
         ),
+        ..._evidenceLabels(),
+        ..._conflictLabels(),
         const SizedBox(height: 2),
         _RawTextTile(text: widget.draft.rawText),
         const SizedBox(height: 18),
@@ -184,6 +205,58 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
       ],
     );
   }
+
+  List<Widget> _evidenceLabels() {
+    final labels = <Widget>[];
+    for (final field in RecognitionField.values) {
+      final item = widget.draft.evidence
+          .where((e) => e.field == field)
+          .firstOrNull;
+      if (item == null) continue;
+      labels.add(
+        Text(
+          '${_fieldName(field)}：${_evidenceLabel(item)}',
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+        ),
+      );
+    }
+    return labels;
+  }
+
+  String _evidenceLabel(RecognitionEvidence evidence) {
+    if (evidence.kind == RecognitionEvidenceKind.direct) return '来自原文';
+    return evidence.source == RecognitionEvidenceSource.trackingPrefixRule
+        ? '根据运单号规则推断'
+        : '根据站点规则推断';
+  }
+
+  List<Widget> _conflictLabels() {
+    return [
+      for (final conflict in widget.draft.conflicts) ...[
+        const SizedBox(height: 8),
+        Text(
+          '检测到多个可能结果，请确认',
+          style: TextStyle(fontSize: 13, color: Colors.orange.shade800),
+        ),
+        for (final alternative in conflict.alternatives)
+          Text(
+            '${_fieldName(conflict.field)}：${_displayValue(alternative.value)}',
+            style: TextStyle(fontSize: 13, color: Colors.orange.shade800),
+          ),
+      ],
+    ];
+  }
+
+  String _displayValue(Object value) => switch (value) {
+    CourierCompany company => company.displayName,
+    _ => value.toString(),
+  };
+
+  String _fieldName(RecognitionField field) => switch (field) {
+    RecognitionField.pickupCode => '取件码',
+    RecognitionField.courierCompany => '快递公司',
+    RecognitionField.trackingNumber => '运单号',
+  };
 }
 
 class _RawTextTile extends StatelessWidget {

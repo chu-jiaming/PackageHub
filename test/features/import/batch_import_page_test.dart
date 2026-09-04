@@ -179,7 +179,148 @@ void main() {
     expect(find.byKey(const Key('pickupCodeField')), findsOneWidget);
     expect(find.text('1 个识别结果'), findsOneWidget);
   });
+
+  testWidgets(
+    'renders every draft from one image without repeating thumbnail',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BatchImportPage(
+            imagePaths: const ['multi.png'],
+            ocrService: _FakeOcrService({'multi.png': _multiCredentialText}),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 张截图'), findsOneWidget);
+      expect(find.text('识别完成 1 / 1'), findsOneWidget);
+      expect(find.text('识别出 2 个取件凭证'), findsOneWidget);
+      expect(find.text('圆通速递'), findsOneWidget);
+      expect(find.text('28-2-4367'), findsOneWidget);
+      expect(find.text('申通快递'), findsOneWidget);
+      expect(find.text('519-3-9180'), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
+    },
+  );
+
+  testWidgets('keeps image progress separate from credential count', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BatchImportPage(
+          imagePaths: const ['one.png', 'two.png', 'three.png', 'four.png'],
+          ocrService: _FakeOcrService({
+            'one.png': _multiCredentialText,
+            'two.png': '极兔速递\n取件码 Z5-2-1350',
+            'three.png': '顺丰速运\n取件码 8-3-2051',
+            'four.png': '韵达快递\n取件码 6-2-8-1',
+          }),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('4 张截图'), findsOneWidget);
+    expect(find.text('识别完成 4 / 4'), findsOneWidget);
+    expect(find.text('圆通速递'), findsOneWidget);
+    expect(find.text('28-2-4367'), findsOneWidget);
+    expect(find.text('申通快递'), findsOneWidget);
+    expect(find.text('519-3-9180'), findsOneWidget);
+    expect(find.text('5 个取件凭证'), findsNothing);
+  });
+
+  testWidgets('review receives all drafts from one image', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BatchImportPage(
+          imagePaths: const ['multi.png'],
+          ocrService: _FakeOcrService({'multi.png': _multiCredentialText}),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('openBatchReviewButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BatchReviewPage), findsOneWidget);
+    expect(find.byKey(const Key('reviewGroupScreenshot_0')), findsOneWidget);
+    expect(find.text('2 个识别结果'), findsOneWidget);
+    expect(find.text('28-2-4367'), findsOneWidget);
+    expect(find.text('519-3-9180'), findsOneWidget);
+  });
+
+  testWidgets('retry replaces the complete drafts list', (tester) async {
+    final ocrService = _FakeOcrService({'multi.png': Exception('first try')});
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BatchImportPage(
+          imagePaths: const ['multi.png'],
+          ocrService: ocrService,
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('识别失败'), findsWidgets);
+
+    ocrService.responses['multi.png'] = _multiCredentialText;
+    await tester.tap(find.byKey(const Key('retryBatchImportItem_0')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('识别出 2 个取件凭证'), findsOneWidget);
+    expect(find.text('28-2-4367'), findsOneWidget);
+    expect(find.text('519-3-9180'), findsOneWidget);
+  });
+
+  testWidgets('removing an image removes its complete credential group', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BatchImportPage(
+          imagePaths: const ['multi.png'],
+          ocrService: _FakeOcrService({'multi.png': _multiCredentialText}),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('28-2-4367'), findsOneWidget);
+    expect(find.text('519-3-9180'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('removeBatchImportItem_0')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0 张截图'), findsOneWidget);
+    expect(find.text('28-2-4367'), findsNothing);
+    expect(find.text('519-3-9180'), findsNothing);
+  });
 }
+
+const _multiCredentialText = '''
+天津商业大学新菜乌驿站
+28-2-4367
+今日到品
+单号添加
+回通 YT8897917364367
+还有包裹未显示？查询取件码
+实景找包裹
+好友代取
+跑腿送货
+临时场地1|校内申通快递
+申通
+519-3-9180
+今日期品
+单号添加
+申通 777440538750180
+好友代取
+跑腿送货
+''';
 
 class _FakeOcrService implements TextRecognitionService {
   final Map<String, Object> responses;
