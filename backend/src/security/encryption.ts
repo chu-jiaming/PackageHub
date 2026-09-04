@@ -1,0 +1,3 @@
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+export function encryptToken(value: string, key: Buffer): string { const iv=randomBytes(12); const c=createCipheriv('aes-256-gcm',key,iv); const body=Buffer.concat([c.update(value,'utf8'),c.final()]); return [iv,c.getAuthTag(),body].map(x=>x.toString('base64url')).join('.'); }
+export function decryptToken(value: string, key: Buffer): string { const [iv,tag,body]=value.split('.').map(x=>Buffer.from(x,'base64url')); const d=createDecipheriv('aes-256-gcm',key,iv); d.setAuthTag(tag); return Buffer.concat([d.update(body),d.final()]).toString('utf8'); }

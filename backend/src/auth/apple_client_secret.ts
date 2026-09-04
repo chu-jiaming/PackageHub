@@ -1,0 +1,2 @@
+import { SignJWT, importPKCS8 } from 'jose';
+export async function createAppleClientSecret(teamId:string,keyId:string,clientId:string,privateKey:string){ const key=await importPKCS8(privateKey,'ES256'); return new SignJWT({}).setProtectedHeader({alg:'ES256',kid:keyId}).setIssuer(teamId).setSubject(clientId).setAudience('https://appleid.apple.com').setIssuedAt().setExpirationTime('180d').sign(key); }

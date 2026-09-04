@@ -1,0 +1,26 @@
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { jwtVerify } from 'jose';
+import { AppleTokenVerifier } from './apple_token_verifier.js';
+import { AppleTokenExchange } from './apple_token_exchange.js';
+import { accessToken, hashToken, newRefreshToken } from '../security/tokens.js';
+import { decryptToken, encryptToken } from '../security/encryption.js';
+
+type Challenge={id:string;nonce:string;state:string;installationId:string;expires:number;used:boolean};
+type User={id:string;appleSubject:string;displayName:string|null;email:string|null};
+type Device={id:string;userId:string;installationId:string;platform:string;deviceLabel:string;appVersion?:string;lastSeen:number};
+type Session={id:string;userId:string;deviceId:string;refreshHash:string;expires:number;revoked:boolean};
+export class AuthService {
+  challenges=new Map<string,Challenge>(); users=new Map<string,User>(); usersByApple=new Map<string,string>(); devices=new Map<string,Device>(); sessions=new Map<string,Session>(); credentials=new Map<string,string>();
+  constructor(private verifier:AppleTokenVerifier, private apple:AppleTokenExchange, private jwtSecret: string, private encryptionKey: Buffer) {}
+  challenge(installationId:string){const c={id:randomUUID(),nonce:randomBytes(32).toString('base64url'),state:randomBytes(32).toString('base64url'),installationId,expires:Date.now()+300000,used:false};this.challenges.set(c.id,c);return {challengeId:c.id,nonce:c.nonce,state:c.state};}
+  async login(input:{challengeId:string;identityToken:string;authorizationCode:string;returnedState:string;installationId:string;platform:string;displayName?:string|null;email?:string|null;appVersion?:string}){const c=this.challenges.get(input.challengeId);if(!c||c.used||c.expires<Date.now()||c.installationId!==input.installationId||c.state!==input.returnedState)throw new Error('AUTH_CHALLENGE_INVALID');const claims=await this.verifier.verify(input.identityToken,createHash('sha256').update(c.nonce).digest('hex'));const exchanged=await this.apple.exchange(input.authorizationCode);let userId=this.usersByApple.get(claims.sub);let user=userId?this.users.get(userId):undefined;if(!user){user={id:randomUUID(),appleSubject:claims.sub,displayName:input.displayName??null,email:input.email??null};this.users.set(user.id,user);this.usersByApple.set(claims.sub,user.id);}else{if(!user.displayName&&input.displayName)user.displayName=input.displayName;if(!user.email&&input.email)user.email=input.email;}
+    const deviceKey=`${user.id}:${input.installationId}`;let device=this.devices.get(deviceKey);if(!device){device={id:randomUUID(),userId:user.id,installationId:input.installationId,platform:input.platform,deviceLabel:input.platform==='ios'?'此 iPhone':'此设备',appVersion:last(input.appVersion),lastSeen:Date.now()};this.devices.set(deviceKey,device);}else device.lastSeen=Date.now();if(exchanged.refreshToken)this.credentials.set(user.id,encryptToken(exchanged.refreshToken,this.encryptionKey));const session=this.createSession(user.id,device.id);c.used=true;return await this.response(user,session);}
+  private createSession(userId:string,deviceId:string){const raw=newRefreshToken();const s={id:randomUUID(),userId,deviceId,refreshHash:hashToken(raw),expires:Date.now()+60*24*3600_000,revoked:false};this.sessions.set(s.id,s);return {s,raw};}
+  private async response(user:User,session:{s:Session;raw:string}){return {user:{id:user.id,displayName:user.displayName,email:user.email},session:{accessToken:await accessToken(user.id,session.s.id,session.s.deviceId,this.jwtSecret),refreshToken:session.raw,accessTokenExpiresAt:new Date(Date.now()+900000).toISOString()}};}
+  async refresh(raw:string){const old=[...this.sessions.values()].find(s=>s.refreshHash===hashToken(raw)&&!s.revoked&&s.expires>Date.now());if(!old)throw new Error('REFRESH_INVALID');old.revoked=true;const user=this.users.get(old.userId);if(!user)throw new Error('REFRESH_INVALID');return await this.response(user,this.createSession(old.userId,old.deviceId));}
+  async authenticate(header?:string){if(!header?.startsWith('Bearer '))throw new Error('UNAUTHORIZED');const {payload}=await jwtVerify(header.slice(7),Buffer.from(this.jwtSecret));if(typeof payload.sub!=='string')throw new Error('UNAUTHORIZED');return this.users.get(payload.sub)??(()=>{throw new Error('UNAUTHORIZED')})();}
+  async logout(header?:string){const u=await this.authenticate(header);for(const s of this.sessions.values())if(s.userId===u.id)s.revoked=true;}
+  async devicesFor(header?:string){const u=await this.authenticate(header);return [...this.devices.values()].filter(d=>d.userId===u.id).map(d=>({id:d.id,installationId:d.installationId,platform:d.platform,deviceLabel:d.deviceLabel,appVersion:d.appVersion,lastSeenAt:new Date(d.lastSeen).toISOString()}));}
+  async delete(header?:string){const u=await this.authenticate(header);const stored=this.credentials.get(u.id);if(!stored)throw new Error('APPLE_CREDENTIAL_MISSING');await this.apple.revoke(decryptToken(stored,this.encryptionKey));for(const [k,d] of this.devices)if(d.userId===u.id)this.devices.delete(k);for(const [k,s] of this.sessions)if(s.userId===u.id)this.sessions.delete(k);this.credentials.delete(u.id);this.users.delete(u.id);this.usersByApple.delete(u.appleSubject);}
+}
+const last=(v?:string)=>v||undefined;
