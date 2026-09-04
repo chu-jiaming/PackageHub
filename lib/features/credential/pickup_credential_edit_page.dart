@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:packagehub/core/parser/pickup_parser.dart';
 import 'package:packagehub/core/repository/pickup_credential_repository.dart';
+import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/components/ph_navigation_header.dart';
+import 'package:packagehub/design_system/components/ph_select_field.dart';
+import 'package:packagehub/design_system/components/ph_text_field.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
 
@@ -85,22 +89,21 @@ class _PickupCredentialEditPageState extends State<PickupCredentialEditPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('编辑取件凭证')),
+      appBar: PHNavigationHeader(
+        title: '编辑取件凭证',
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            DropdownButtonFormField<CourierCompany>(
+            PHSelectField<CourierCompany>(
               key: const Key('editCourierCompanyField'),
-              initialValue: _selectedCourierCompany,
-              decoration: InputDecoration(
-                labelText: '快递公司',
-                filled: true,
-                border: InputBorder.none,
-                fillColor: Theme.of(context)
-                    .colorScheme
-                    .surfaceContainerHighest,
-              ),
+              value: _selectedCourierCompany,
               items: CourierCompany.values.map((company) {
                 return DropdownMenuItem(
                   value: company,
@@ -117,49 +120,28 @@ class _PickupCredentialEditPageState extends State<PickupCredentialEditPage> {
                         _selectedCourierCompany = company;
                       });
                     },
+              label: '快递公司',
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              key: const Key('editPickupCodeField'),
+            PHTextField(
+              fieldKey: const Key('editPickupCodeField'),
               controller: _pickupCodeController,
               enabled: !_isSaving,
               textInputAction: TextInputAction.next,
-              decoration: InputDecoration(
-                labelText: '取件码',
-                filled: true,
-                border: InputBorder.none,
-                fillColor: Theme.of(context)
-                    .colorScheme
-                    .surfaceContainerHighest,
-              ),
+              label: '取件码',
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              key: const Key('editTrackingNumberField'),
+            PHTextField(
+              fieldKey: const Key('editTrackingNumberField'),
               controller: _trackingNumberController,
               enabled: !_isSaving,
               textInputAction: TextInputAction.next,
-              decoration: InputDecoration(
-                labelText: '运单号',
-                filled: true,
-                border: InputBorder.none,
-                fillColor: Theme.of(context)
-                    .colorScheme
-                    .surfaceContainerHighest,
-              ),
+              label: '运单号',
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<PickupStatus>(
+            PHSelectField<PickupStatus>(
               key: const Key('editStatusField'),
-              initialValue: _selectedStatus,
-              decoration: InputDecoration(
-                labelText: '状态',
-                filled: true,
-                border: InputBorder.none,
-                fillColor: Theme.of(context)
-                    .colorScheme
-                    .surfaceContainerHighest,
-              ),
+              value: _selectedStatus,
               items: PickupStatus.values.map((status) {
                 return DropdownMenuItem(
                   value: status,
@@ -176,12 +158,13 @@ class _PickupCredentialEditPageState extends State<PickupCredentialEditPage> {
                         _selectedStatus = status;
                       });
                     },
+              label: '状态',
             ),
             const SizedBox(height: 24),
-            FilledButton(
+            PHButton(
               key: const Key('saveCredentialEditButton'),
               onPressed: _isSaving ? null : _save,
-              child: Text(_isSaving ? '保存中...' : '保存'),
+              label: _isSaving ? '保存中...' : '保存',
             ),
           ],
         ),

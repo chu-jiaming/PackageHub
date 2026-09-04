@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:packagehub/core/repository/pickup_credential_repository.dart';
+import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/components/ph_detail_row.dart';
+import 'package:packagehub/design_system/components/ph_navigation_header.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 import 'package:packagehub/features/credential/pickup_credential_edit_page.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
@@ -172,14 +176,14 @@ class _PickupCredentialDetailPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: PHNavigationHeader(
         leading: IconButton(
           key: const Key('credentialDetailBackButton'),
           icon: const Icon(Icons.arrow_back),
           onPressed: _close,
           tooltip: '返回',
         ),
-        title: const Text('取件凭证详情'),
+        title: '取件凭证详情',
         actions: [
           TextButton(
             key: const Key('editCredentialButton'),
@@ -192,78 +196,45 @@ class _PickupCredentialDetailPageState
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            _DetailRow(
+            PHDetailRow(
               label: '快递公司',
               value: _credential.courierCompany.displayName,
             ),
-            _DetailRow(label: '取件码', value: _credential.pickupCode ?? '未填写'),
-            _DetailRow(
+            PHDetailRow(label: '取件码', value: _credential.pickupCode ?? '未填写'),
+            PHDetailRow(
               label: '运单号',
               value: _credential.trackingNumber ?? '未填写',
             ),
-            _DetailRow(label: '状态', value: _credential.status.displayName),
-            _DetailRow(
+            PHDetailRow(label: '状态', value: _credential.status.displayName),
+            PHDetailRow(
               label: '来源平台',
               value: _credential.sourcePlatform.displayName,
-              subdued: true,
+              style: PHDetailRowStyle.subdued,
+              showSeparator: false,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: PHSpacing.lg),
             if (_credential.status == PickupStatus.pending)
-              FilledButton(
+              PHButton(
                 key: const Key('detailMarkPickedUpButton'),
                 onPressed: _isUpdating || _isDeleting ? null : _markPickedUp,
-                child: Text(_isUpdating ? '更新中...' : '标记已取件'),
+                label: _isUpdating ? '更新中...' : '标记已取件',
               )
             else if (_credential.status == PickupStatus.pickedUp)
-              FilledButton.tonal(
+              PHButton(
+                variant: PHButtonVariant.secondary,
                 key: const Key('detailMarkPendingButton'),
                 onPressed: _isUpdating || _isDeleting ? null : _markPending,
-                child: Text(_isUpdating ? '更新中...' : '恢复待取件'),
+                label: _isUpdating ? '更新中...' : '恢复待取件',
               ),
-            const SizedBox(height: 12),
-            OutlinedButton(
+            const SizedBox(height: PHSpacing.sm),
+            PHButton(
+              variant: PHButtonVariant.destructive,
               key: const Key('deleteCredentialButton'),
               onPressed: _isUpdating || _isDeleting ? null : _confirmDelete,
-              child: Text(_isDeleting ? '删除中...' : '删除凭证'),
+              label: _isDeleting ? '删除中...' : '删除凭证',
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool subdued;
-
-  const _DetailRow({
-    required this.label,
-    required this.value,
-    this.subdued = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final valueStyle = TextStyle(
-      fontSize: 17,
-      fontWeight: FontWeight.w600,
-      color: subdued ? Colors.grey.shade600 : null,
-    );
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 6),
-          Text(value, style: valueStyle),
-        ],
       ),
     );
   }
