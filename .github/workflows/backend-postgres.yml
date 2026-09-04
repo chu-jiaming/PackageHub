@@ -1,0 +1,39 @@
+name: Backend PostgreSQL
+
+on:
+  push:
+    paths: ['backend/**']
+  pull_request:
+    paths: ['backend/**']
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: packagehub_test
+          POSTGRES_PASSWORD: packagehub_test
+          POSTGRES_DB: packagehub_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U packagehub_test -d packagehub_test"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      TEST_DATABASE_URL: postgresql://packagehub_test:packagehub_test@localhost:5432/packagehub_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --run
+      - run: npm run db:migrate
+      - run: npm run test:integration
