@@ -5,9 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:packagehub/core/duplicate/tracking_number_normalizer.dart';
 import 'package:packagehub/core/repository/pickup_credential_repository.dart';
+import 'package:packagehub/design_system/components/ph_courier_section_header.dart';
 import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/components/ph_package_card.dart';
 import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_sizes.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 import 'package:packagehub/main.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
@@ -114,6 +117,24 @@ void main() {
       expect(find.text('极兔速递 · 1'), findsOneWidget);
       expect(find.text('顺丰速运 · 1'), findsOneWidget);
       expect(find.text('中通快递 · 1'), findsOneWidget);
+    });
+
+    testWidgets('keeps courier header and package card spacing balanced', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        repository: _FakePickupCredentialRepository(
+          initialCredentials: [_credential(id: 1)],
+        ),
+      );
+
+      final courierHeader = tester.getRect(find.byType(PHCourierSectionHeader));
+      final packageCard = tester.getRect(find.byType(PHPackageCard));
+      expect(
+        packageCard.top - courierHeader.bottom,
+        greaterThanOrEqualTo(PHSpacing.sm),
+      );
     });
 
     testWidgets('displays courier, pickup code, tracking number, and status', (

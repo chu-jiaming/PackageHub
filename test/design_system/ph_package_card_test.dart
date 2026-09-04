@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:packagehub/design_system/components/ph_package_card.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 
 Widget _app({
   required PHPackageCardState state,
@@ -29,11 +31,33 @@ void main() {
     await tester.pumpWidget(_app(state: PHPackageCardState.active));
 
     expect(find.text('A-1-2'), findsOneWidget);
+    expect(find.text('取件码'), findsOneWidget);
     expect(find.text('SF123'), findsOneWidget);
     expect(find.text('南门驿站'), findsOneWidget);
     expect(
       find.byKey(const Key('phPackageCardCompleteAction')),
       findsOneWidget,
+    );
+
+    final code = tester.widget<Text>(find.text('A-1-2'));
+    expect(code.style?.fontSize, 28);
+    expect(code.style?.height, 34 / 28);
+    expect(code.style?.letterSpacing, -0.4);
+    final trackingLabel = tester.widget<Text>(find.text('运单号'));
+    expect(trackingLabel.style?.color, PHColorScheme.light.textTertiary);
+    final trackingValue = tester.widget<Text>(find.text('SF123'));
+    expect(trackingValue.style?.color, PHColorScheme.light.textSecondary);
+    expect(trackingValue.style?.fontWeight, FontWeight.w600);
+    expect(trackingValue.textAlign, TextAlign.end);
+
+    final divider = tester.getRect(find.byType(Divider));
+    expect(
+      divider.top - tester.getRect(find.text('A-1-2')).bottom,
+      greaterThanOrEqualTo(PHSpacing.sm),
+    );
+    expect(
+      tester.getRect(find.text('SF123')).top - divider.bottom,
+      greaterThanOrEqualTo(PHSpacing.sm),
     );
   });
 
@@ -80,6 +104,9 @@ void main() {
     );
 
     expect(find.text('—'), findsNWidgets(2));
+    for (final emptyValue in tester.widgetList<Text>(find.text('—'))) {
+      expect(emptyValue.style?.color, PHColorScheme.light.textTertiary);
+    }
   });
 
   testWidgets('complete action has a 44 point hit target and emits callback', (

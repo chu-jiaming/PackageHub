@@ -37,6 +37,7 @@ class PHPackageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = PHColorScheme.of(context);
+    final completed = state == PHPackageCardState.completed;
     final content = Padding(
       padding: const EdgeInsets.all(PHSpacing.md),
       child: Column(
@@ -53,17 +54,36 @@ class PHPackageCard extends StatelessWidget {
                       Flexible(
                         child: Semantics(
                           label: '取件码 ${pickupCode ?? '未识别取件码'}',
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              pickupCode ?? '未识别取件码',
-                              maxLines: 1,
-                              style: PHTypography.title1.copyWith(
-                                color: colors.textPrimary,
-                                fontWeight: FontWeight.w700,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '取件码',
+                                style: PHTypography.caption2.copyWith(
+                                  color: completed
+                                      ? colors.textTertiary
+                                      : colors.textSecondary,
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: PHSpacing.xxs),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    pickupCode ?? '未识别取件码',
+                                    maxLines: 1,
+                                    style: PHTypography.title1.copyWith(
+                                      color: completed
+                                          ? colors.textTertiary
+                                          : colors.textPrimary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -79,7 +99,9 @@ class PHPackageCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: PHTypography.caption2.copyWith(
-                              color: colors.textSecondary,
+                              color: completed
+                                  ? colors.textTertiary
+                                  : colors.textSecondary,
                             ),
                           ),
                         ),
@@ -92,12 +114,15 @@ class PHPackageCard extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: PHSpacing.sm),
           Divider(
             height: PHSizes.separator,
             thickness: PHSizes.separator,
             color: colors.separatorDefault,
           ),
+          const SizedBox(height: PHSpacing.sm),
           _infoRow('运单号', trackingNumber, colors),
+          const SizedBox(height: PHSpacing.sm),
           _infoRow('位置', location, colors),
         ],
       ),
@@ -109,7 +134,11 @@ class PHPackageCard extends StatelessWidget {
         color: state == PHPackageCardState.completed
             ? colors.bgSurfaceSecondary
             : colors.bgSurface,
-        borderRadius: BorderRadius.circular(PHRadius.lg),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(PHRadius.lg),
+          side: BorderSide(color: colors.borderDefault, width: PHSizes.stroke),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(PHRadius.lg),
@@ -118,13 +147,6 @@ class PHPackageCard extends StatelessWidget {
             width: double.infinity,
             constraints: const BoxConstraints(
               minHeight: PHSizes.cardReferenceHeight,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(PHRadius.lg),
-              border: Border.all(
-                color: colors.borderDefault,
-                width: PHSizes.stroke,
-              ),
             ),
             child: content,
           ),
@@ -149,7 +171,7 @@ class PHPackageCard extends StatelessWidget {
             backgroundColor: enabled
                 ? colors.bgSurfaceSecondary
                 : colors.bgDisabled,
-            foregroundColor: colors.iconPrimary,
+            foregroundColor: enabled ? colors.iconPrimary : colors.iconDisabled,
             shape: const CircleBorder(),
           ),
           icon: const Icon(Icons.check, size: 20),
@@ -160,6 +182,10 @@ class PHPackageCard extends StatelessWidget {
   }
 
   Widget _infoRow(String label, String? value, PHColorScheme colors) {
+    final hasValue = value?.isNotEmpty ?? false;
+    final valueColor = !hasValue || state == PHPackageCardState.completed
+        ? colors.textTertiary
+        : colors.textSecondary;
     return SizedBox(
       height: PHSizes.rowHeight,
       child: Row(
@@ -168,17 +194,19 @@ class PHPackageCard extends StatelessWidget {
             width: PHSizes.labelColumn,
             child: Text(
               label,
-              style: PHTypography.caption2.copyWith(
-                color: colors.textSecondary,
-              ),
+              style: PHTypography.caption2.copyWith(color: colors.textTertiary),
             ),
           ),
           Expanded(
             child: Text(
-              value ?? '—',
+              hasValue ? value! : '—',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: PHTypography.footnote.copyWith(color: colors.textPrimary),
+              textAlign: TextAlign.end,
+              style: PHTypography.footnote.copyWith(
+                color: valueColor,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

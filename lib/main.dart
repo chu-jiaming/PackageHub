@@ -1059,7 +1059,7 @@ class _HomePageState extends State<HomePage> {
         Padding(
           padding: const EdgeInsets.only(
             top: PHSpacing.sm,
-            bottom: PHSpacing.xs,
+            bottom: PHSpacing.sm,
           ),
           child: PHCourierSectionHeader(
             title:
