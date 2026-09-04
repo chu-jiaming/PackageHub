@@ -1,4 +1,12 @@
 abstract final class PHSizes {
+  static const double minInteractive = 44;
+  static const double controlSmall = 44;
+  static const double controlMedium = 48;
+  static const double controlLarge = 52;
+  static const double iconSmall = 18;
+  static const double iconMedium = 20;
+  static const double iconLarge = 22;
+  static const double segmentedControl = 44;
   static const double cardReferenceWidth = 360;
   static const double cardReferenceHeight = 137;
   static const double contentWidth = 336;

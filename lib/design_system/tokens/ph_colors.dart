@@ -8,4 +8,8 @@ abstract final class PHColors {
   static const textTertiary = Color(0xFF8E8E93);
   static const borderDefault = Color(0xFFE5E5EA);
   static const separatorDefault = Color(0xFFE5E5EA);
+  static const accent = Color(0xFF007AFF);
+  static const success = Color(0xFF34C759);
+  static const warning = Color(0xFFFF9500);
+  static const destructive = Color(0xFFFF3B30);
 }
