@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:packagehub/design_system/components/ph_package_card.dart';
+import 'package:packagehub/design_system/tokens/ph_motion.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
 
@@ -43,24 +44,50 @@ class PickupCredentialCard extends StatelessWidget {
       onMarkPending: onMarkPending,
       showCourierCompany: showCourierCompany,
     );
-    if (isSelectionMode) return card;
-    return Slidable(
-      key: Key('credentialSlidable-${credential.id ?? 'new'}'),
-      endActionPane: ActionPane(
-        motion: const DrawerMotion(),
-        extentRatio: 0.28,
-        children: [
-          SlidableAction(
-            key: Key('credentialDeleteAction-${credential.id ?? 'new'}'),
-            onPressed: (_) => onDelete(),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            foregroundColor: Theme.of(context).colorScheme.onError,
-            icon: Icons.delete_outline,
-            label: '删除',
+    final displayedCard = isSelectionMode
+        ? card
+        : ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Slidable(
+              key: Key('credentialSlidable-${credential.id ?? 'new'}'),
+              endActionPane: ActionPane(
+                motion: const DrawerMotion(),
+                extentRatio: 0.28,
+                children: [
+                  SlidableAction(
+                    key: Key('credentialDeleteAction-${credential.id ?? 'new'}'),
+                    onPressed: (_) => onDelete(),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    foregroundColor: Theme.of(context).colorScheme.onError,
+                    icon: Icons.delete_outline,
+                    label: '删除',
+                  ),
+                ],
+              ),
+              child: card,
+            ),
+          );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRect(
+          child: AnimatedContainer(
+            duration: PHMotion.duration(context),
+            curve: Curves.easeOutCubic,
+            width: isSelectionMode ? 60 : 0,
+            child: AnimatedOpacity(
+              opacity: isSelectionMode ? 1 : 0,
+              duration: PHMotion.duration(context),
+              child: Checkbox(
+                key: Key('credentialSelectionCheckbox-${credential.id}'),
+                value: isSelected,
+                onChanged: isSelectionMode ? onSelectionChanged : null,
+              ),
+            ),
           ),
-        ],
-      ),
-      child: card,
+        ),
+        Expanded(child: displayedCard),
+      ],
     );
   }
 }
@@ -127,33 +154,18 @@ class _CredentialCardContent extends StatelessWidget {
           : null,
     );
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (isSelectionMode) ...[
-          Checkbox(
-            key: Key('credentialSelectionCheckbox-${credential.id}'),
-            value: isSelected,
-            onChanged: onSelectionChanged,
-          ),
-          const SizedBox(width: 12),
-        ],
-        Expanded(
-          child: showCourierCompany
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      credential.courierCompany.displayName,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    packageCard,
-                  ],
-                )
-              : packageCard,
-        ),
-      ],
-    );
+    return showCourierCompany
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                credential.courierCompany.displayName,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              packageCard,
+            ],
+          )
+        : packageCard;
   }
 }
