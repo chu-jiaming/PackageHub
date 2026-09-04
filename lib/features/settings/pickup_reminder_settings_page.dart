@@ -8,6 +8,8 @@ import 'package:keyboard_actions/keyboard_actions.dart';
 import 'package:packagehub/core/repository/pickup_credential_repository.dart';
 import 'package:packagehub/models/pickup_reminder_settings.dart';
 import 'package:packagehub/core/reminder/pickup_notification_service.dart';
+import 'package:packagehub/design_system/components/ph_navigation_header.dart';
+import 'package:packagehub/design_system/components/ph_text_field.dart';
 
 class PickupReminderSettingsPage extends StatefulWidget {
   final PickupReminderSettingsRepository repository;
@@ -75,7 +77,14 @@ class _PickupReminderSettingsPageState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('取件提醒')),
+    appBar: PHNavigationHeader(
+      title: '取件提醒',
+      leading: IconButton(
+        tooltip: '返回',
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.arrow_back),
+      ),
+    ),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
         : KeyboardActions(
@@ -104,8 +113,8 @@ class _PickupReminderSettingsPageState
                       child: const Text('完成'),
                     ),
                   ],
-                  child: TextField(
-                    key: const Key('pickupReminderDaysField'),
+                  child: PHTextField(
+                    fieldKey: const Key('pickupReminderDaysField'),
                     controller: _daysController,
                     focusNode: _reminderDaysFocusNode,
                     enabled: _settings.enabled,
@@ -113,11 +122,8 @@ class _PickupReminderSettingsPageState
                     textInputAction: TextInputAction.done,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onTapOutside: (_) => _reminderDaysFocusNode.unfocus(),
-                    decoration: const InputDecoration(
-                      labelText: '提醒天数',
-                      suffixText: '天',
-                      border: OutlineInputBorder(),
-                    ),
+                    label: '提醒天数',
+                    suffixText: '天',
                     onSubmitted: (_) => unawaited(_submitDays()),
                   ),
                 ),

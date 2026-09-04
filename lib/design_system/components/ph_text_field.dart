@@ -6,15 +6,18 @@ import 'package:packagehub/design_system/tokens/ph_spacing.dart';
 import 'package:packagehub/design_system/tokens/ph_typography.dart';
 
 class PHTextField extends StatelessWidget {
+  final Key? fieldKey;
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final bool enabled;
   final String? label;
   final String? hintText;
+  final String? suffixText;
   final String? helperText;
   final String? errorText;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
+  final TapRegionCallback? onTapOutside;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final List<TextInputFormatter>? inputFormatters;
@@ -25,15 +28,18 @@ class PHTextField extends StatelessWidget {
 
   const PHTextField({
     super.key,
+    this.fieldKey,
     this.controller,
     this.focusNode,
     this.enabled = true,
     this.label,
     this.hintText,
+    this.suffixText,
     this.helperText,
     this.errorText,
     this.onChanged,
     this.onSubmitted,
+    this.onTapOutside,
     this.keyboardType,
     this.textInputAction,
     this.inputFormatters,
@@ -49,11 +55,13 @@ class PHTextField extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final inputTheme = Theme.of(context).inputDecorationTheme;
     return TextField(
+      key: fieldKey,
       controller: controller,
       focusNode: focusNode,
       enabled: enabled,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
+      onTapOutside: onTapOutside,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       inputFormatters: inputFormatters,
@@ -64,6 +72,7 @@ class PHTextField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: label,
         hintText: hintText,
+        suffixText: suffixText,
         helperText: helperText,
         errorText: errorText,
         prefixIcon: prefixIcon,

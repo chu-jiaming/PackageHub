@@ -7,7 +7,7 @@ import 'package:packagehub/design_system/tokens/ph_typography.dart';
 enum PHNavigationHeaderStyle { standard, largeTitle }
 
 /// Presentation-only navigation header. Navigation is owned by the caller.
-class PHNavigationHeader extends StatelessWidget {
+class PHNavigationHeader extends StatelessWidget implements PreferredSizeWidget {
   final PHNavigationHeaderStyle style;
   final Widget? leading;
   final String title;
@@ -20,6 +20,11 @@ class PHNavigationHeader extends StatelessWidget {
     required this.title,
     this.actions = const [],
   });
+
+  @override
+  Size get preferredSize => Size.fromHeight(
+    style == PHNavigationHeaderStyle.largeTitle ? 104 : 64,
+  );
 
   @override
   Widget build(BuildContext context) {

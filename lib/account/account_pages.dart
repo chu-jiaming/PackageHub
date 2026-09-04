@@ -9,6 +9,12 @@ import 'package:packagehub/subscription/subscription_entitlement.dart';
 import 'package:packagehub/subscription/storekit_models.dart';
 import 'package:packagehub/subscription/debug/debug_subscription_override.dart';
 import 'package:packagehub/subscription/debug_entitlement_override_policy.dart';
+import 'package:packagehub/design_system/components/ph_detail_row.dart';
+import 'package:packagehub/design_system/components/ph_grouped_section.dart';
+import 'package:packagehub/design_system/components/ph_list_row.dart';
+import 'package:packagehub/design_system/components/ph_navigation_header.dart';
+import 'package:packagehub/design_system/components/ph_section_header.dart';
+import 'package:packagehub/design_system/components/ph_empty_state.dart';
 
 void showPhaseOneNotice(BuildContext context, String message) {
   showCupertinoDialog<void>(
@@ -289,27 +295,48 @@ class DataPrivacyPage extends StatelessWidget {
   const DataPrivacyPage({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('数据与隐私')),
+    appBar: PHNavigationHeader(
+      title: '数据与隐私',
+      leading: IconButton(
+        tooltip: '返回',
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.arrow_back),
+      ),
+    ),
     body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: const [
-        _StatusTile(
-          title: '本地数据',
-          status: '取件凭证保存在此设备',
-          icon: Icons.phone_iphone,
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        PHGroupedSection(
+          title: '数据处理',
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          children: const [
+            PHListRow(
+              leading: Icon(Icons.phone_iphone),
+              title: '本地数据',
+              subtitle: '取件凭证保存在此设备',
+              showChevron: false,
+            ),
+            PHListRow(
+              leading: Icon(Icons.document_scanner_outlined),
+              title: 'OCR',
+              subtitle: '识别在设备端完成',
+              showChevron: false,
+            ),
+            PHListRow(
+              leading: Icon(Icons.cloud_off_outlined),
+              title: '云同步',
+              subtitle: '当前版本未提供',
+              showChevron: false,
+              showSeparator: false,
+            ),
+          ],
         ),
-        _StatusTile(
-          title: 'OCR',
-          status: '识别在设备端完成',
-          icon: Icons.document_scanner_outlined,
+        const SizedBox(height: 16),
+        const PHSectionHeader(title: '隐私说明'),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text('所有取件凭证仍仅存储在本机。PackageHub 当前不会自动上传 OCR 或取件数据。'),
         ),
-        _StatusTile(
-          title: '云同步',
-          status: '当前版本未提供',
-          icon: Icons.cloud_off_outlined,
-        ),
-        SizedBox(height: 20),
-        Text('所有取件凭证仍仅存储在本机。PackageHub 当前不会自动上传 OCR 或取件数据。'),
       ],
     ),
   );
@@ -319,16 +346,33 @@ class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('设置')),
+    appBar: PHNavigationHeader(
+      title: '设置',
+      leading: IconButton(
+        tooltip: '返回',
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.arrow_back),
+      ),
+    ),
     body: ListView(
-      children: [
-        ListTile(
-          leading: Icon(Icons.notifications_outlined),
-          title: Text('提醒'),
-        ),
-        ListTile(
-          leading: Icon(Icons.display_settings_outlined),
-          title: Text('显示设置'),
+      padding: const EdgeInsets.only(bottom: 24),
+      children: const [
+        PHGroupedSection(
+          title: '偏好设置',
+          margin: EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            PHListRow(
+              leading: Icon(Icons.notifications_outlined),
+              title: '提醒',
+              showChevron: false,
+            ),
+            PHListRow(
+              leading: Icon(Icons.display_settings_outlined),
+              title: '显示设置',
+              showChevron: false,
+              showSeparator: false,
+            ),
+          ],
         ),
       ],
     ),
@@ -339,21 +383,35 @@ class HelpFeedbackPage extends StatelessWidget {
   const HelpFeedbackPage({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('帮助与反馈')),
+    appBar: PHNavigationHeader(
+      title: '帮助与反馈',
+      leading: IconButton(
+        tooltip: '返回',
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.arrow_back),
+      ),
+    ),
     body: ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.only(bottom: 24),
       children: [
-        const ListTile(leading: Icon(Icons.help_outline), title: Text('常见问题')),
-        const ListTile(
-          leading: Icon(Icons.bug_report_outlined),
-          title: Text('报告问题'),
-        ),
-        const ListTile(
-          leading: Icon(Icons.lightbulb_outline),
-          title: Text('功能建议'),
+        const PHGroupedSection(
+          title: '支持',
+          margin: EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            PHListRow(leading: Icon(Icons.help_outline), title: '常见问题'),
+            PHListRow(leading: Icon(Icons.bug_report_outlined), title: '报告问题'),
+            PHListRow(
+              leading: Icon(Icons.lightbulb_outline),
+              title: '功能建议',
+              showSeparator: false,
+            ),
+          ],
         ),
         const SizedBox(height: 16),
-        const Text('反馈渠道将在后续版本开放。'),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text('反馈渠道将在后续版本开放。'),
+        ),
       ],
     ),
   );
@@ -363,21 +421,33 @@ class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('关于 PackageHub')),
+    appBar: PHNavigationHeader(
+      title: '关于 PackageHub',
+      leading: IconButton(
+        tooltip: '返回',
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.arrow_back),
+      ),
+    ),
     body: ListView(
-      padding: EdgeInsets.all(24),
-      children: [
-        const _PageIcon(icon: Icons.inventory_2_outlined),
-        const SizedBox(height: 16),
-        const Center(
-          child: Text(
-            'PackageHub',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
+      padding: const EdgeInsets.only(bottom: 24),
+      children: const [
+        PHEmptyState(
+          icon: Icon(Icons.inventory_2_outlined),
+          title: 'PackageHub',
         ),
-        const SizedBox(height: 24),
-        const ListTile(title: Text('隐私'), subtitle: Text('核心取件数据默认仅存储在本机。')),
-        const ListTile(title: Text('版本'), subtitle: Text('当前版本信息随应用构建注入。')),
+        PHGroupedSection(
+          title: '应用信息',
+          margin: EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            PHDetailRow(label: '隐私', value: '核心取件数据默认仅存储在本机。'),
+            PHDetailRow(
+              label: '版本',
+              value: '当前版本信息随应用构建注入。',
+              showSeparator: false,
+            ),
+          ],
+        ),
       ],
     ),
   );
@@ -437,24 +507,6 @@ class _SectionCard extends StatelessWidget {
           child,
         ],
       ),
-    ),
-  );
-}
-
-class _StatusTile extends StatelessWidget {
-  final String title, status;
-  final IconData icon;
-  const _StatusTile({
-    required this.title,
-    required this.status,
-    required this.icon,
-  });
-  @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      trailing: Text(status),
     ),
   );
 }
