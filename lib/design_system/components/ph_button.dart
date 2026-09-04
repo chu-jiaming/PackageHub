@@ -47,8 +47,9 @@ class PHButton extends StatelessWidget {
       PHButtonSize.medium => PHSizes.controlMedium,
       PHButtonSize.large => PHSizes.controlLarge,
     };
+    final contentForeground = enabled ? foreground : colors.textDisabled;
     final textStyle = PHTypography.footnote.copyWith(
-      color: enabled ? foreground : colors.textDisabled,
+      color: contentForeground,
       fontWeight: FontWeight.w600,
     );
 
@@ -72,7 +73,10 @@ class PHButton extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (leading != null) ...[
-                      leading!,
+                      IconTheme(
+                        data: IconThemeData(color: contentForeground),
+                        child: leading!,
+                      ),
                       const SizedBox(width: PHSpacing.sm),
                     ],
                     Text(label, style: textStyle),

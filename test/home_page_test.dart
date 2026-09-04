@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:packagehub/core/duplicate/tracking_number_normalizer.dart';
 import 'package:packagehub/core/repository/pickup_credential_repository.dart';
+import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_sizes.dart';
 import 'package:packagehub/main.dart';
 import 'package:packagehub/models/pickup_credential.dart';
@@ -39,6 +41,25 @@ void main() {
         find.byKey(const Key('pickupReminderSettingsButton')),
         findsOneWidget,
       );
+      final addScreenshotButton = find.ancestor(
+        of: find.text('添加截图'),
+        matching: find.byType(PHButton),
+      );
+      expect(addScreenshotButton, findsOneWidget);
+      final addScreenshotIcon = find.descendant(
+        of: addScreenshotButton,
+        matching: find.byIcon(Icons.add_photo_alternate_outlined),
+      );
+      expect(addScreenshotIcon, findsOneWidget);
+      final iconTheme = tester
+          .widgetList<IconTheme>(
+            find.ancestor(
+              of: addScreenshotIcon,
+              matching: find.byType(IconTheme),
+            ),
+          )
+          .firstWhere((theme) => theme.data.color != null);
+      expect(iconTheme.data.color, PHColorScheme.light.textInverse);
       _expectSingleLineAction(
         tester,
         button: find.byKey(const Key('enterSelectionModeButton')),
