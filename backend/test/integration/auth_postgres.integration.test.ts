@@ -1,0 +1,21 @@
+import { beforeAll, afterAll, describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { pool } from '../../src/db/pool.js';
+import { AuthService } from '../../src/auth/auth_service.js';
+import { pgRepositories, requireDb } from '../../src/db/repositories.js';
+const installation='00000000-0000-4000-8000-000000000001';
+class Verifier { subject='subject-a'; async verify(){return {sub:this.subject};} }
+class Apple { refresh='apple-refresh'; fail=false; async exchange(){return {refreshToken:this.refresh};} async revoke(){if(this.fail)throw new Error('REVOKE_FAILED');} }
+const verifier=new Verifier(); const apple=new Apple();
+const service=()=>new AuthService(verifier as any,apple as any,'integration-jwt-secret-which-is-long-enough-32',Buffer.alloc(32,4),pgRepositories());
+async function login(s:AuthService,id=installation,name:string|null='Ada',email:string|null='a@example.com'){const c=await s.challenge(id);return s.login({challengeId:c.challengeId,identityToken:'fake',authorizationCode:'fake',returnedState:c.state,installationId:id,platform:'ios',displayName:name,email});}
+describe.skipIf(!process.env.TEST_DATABASE_URL)('PostgreSQL auth persistence',()=>{
+  beforeAll(async()=>{if(!process.env.TEST_DATABASE_URL)throw new Error('TEST_DATABASE_URL is required; refusing to use DATABASE_URL');const db=requireDb();await db.query('DROP TABLE IF EXISTS auth_challenges, sessions, devices, apple_auth_credentials, users CASCADE');await db.query(await readFile(resolve('src/db/migrations/001_account.sql'),'utf8'));});
+  afterAll(async()=>{await pool?.end();});
+  it('persists identity/profile and devices across service rebuilds',async()=>{const first=await login(service());const rebuilt=service();const second=await login(rebuilt, '00000000-0000-4000-8000-000000000002',null,null);expect(second.user.id).toBe(first.user.id);expect(second.user.displayName).toBe('Ada');expect((await rebuilt.devicesFor(`Bearer ${first.session.accessToken}`))).toHaveLength(2);});
+  it('keeps same email with different Apple subjects as two users',async()=>{verifier.subject='subject-b';const second=await login(service(),'00000000-0000-0000-0000-000000000003','Other','a@example.com');verifier.subject='subject-a';const first=await login(service(),'00000000-0000-0000-0000-000000000004');expect(second.user.id).not.toBe(first.user.id);});
+  it('rotates refresh tokens and persists logout',async()=>{verifier.subject='subject-c';const s=service();const first=await login(s);const next=await s.refresh(first.session.refreshToken);await expect(s.refresh(first.session.refreshToken)).rejects.toThrow('REFRESH_INVALID');await s.logout(`Bearer ${next.session.accessToken}`);await expect(service().refresh(next.session.refreshToken)).rejects.toThrow('REFRESH_INVALID');});
+  it('allows concurrent refresh and challenge only once',async()=>{verifier.subject='subject-d';const s=service();const first=await login(s);const refresh=await Promise.allSettled([s.refresh(first.session.refreshToken),s.refresh(first.session.refreshToken)]);expect(refresh.filter(x=>x.status==='fulfilled')).toHaveLength(1);const c=await s.challenge('00000000-0000-0000-0000-000000000005');const r=await Promise.allSettled([s.login({challengeId:c.challengeId,identityToken:'x',authorizationCode:'x',returnedState:c.state,installationId:'00000000-0000-0000-0000-000000000005',platform:'ios'}),s.login({challengeId:c.challengeId,identityToken:'x',authorizationCode:'x',returnedState:c.state,installationId:'00000000-0000-0000-0000-000000000005',platform:'ios'})]);expect(r.filter(x=>x.status==='fulfilled')).toHaveLength(1);});
+  it('revoke failure preserves account data and success deletes it',async()=>{verifier.subject='subject-e';const s=service();const first=await login(s);apple.fail=true;await expect(s.delete(`Bearer ${first.session.accessToken}`)).rejects.toThrow('REVOKE_FAILED');expect(await s.authenticate(`Bearer ${first.session.accessToken}`)).toBeTruthy();apple.fail=false;await s.delete(`Bearer ${first.session.accessToken}`);await expect(service().authenticate(`Bearer ${first.session.accessToken}`)).rejects.toThrow('ACCOUNT_NOT_FOUND');});
+});
