@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:packagehub/account/account_pages.dart';
+import 'package:packagehub/design_system/components/ph_bottom_sheet.dart';
+import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/subscription/subscription_repository.dart';
 
 Future<bool> showProUpgradeSheet(
@@ -11,29 +14,28 @@ Future<bool> showProUpgradeSheet(
 }) async {
   final openPro = await showModalBottomSheet<bool>(
     context: context,
-    showDragHandle: true,
+    showDragHandle: false,
+    backgroundColor: Colors.transparent,
     builder: (context) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 12),
-            Text(body),
-            const SizedBox(height: 20),
-            FilledButton(
-              key: const Key('proUpsellPrimaryButton'),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('了解 PackageHub Pro'),
-            ),
-            TextButton(
-              key: const Key('proUpsellSecondaryButton'),
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(secondaryLabel),
-            ),
-          ],
+      child: PHBottomSheet(
+        title: title,
+        actions: [
+          PHButton(
+            key: const Key('proUpsellPrimaryButton'),
+            onPressed: () => Navigator.pop(context, true),
+            label: '了解 PackageHub Pro',
+          ),
+          PHButton(
+            key: const Key('proUpsellSecondaryButton'),
+            variant: PHButtonVariant.tertiary,
+            onPressed: () => Navigator.pop(context, false),
+            label: secondaryLabel,
+          ),
+        ],
+        child: Text(
+          body,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: PHColorScheme.of(context).textPrimary),
         ),
       ),
     ),

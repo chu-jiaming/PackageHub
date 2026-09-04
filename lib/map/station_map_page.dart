@@ -3,6 +3,15 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:packagehub/core/repository/pickup_credential_repository.dart';
+import 'package:packagehub/design_system/components/ph_badge.dart';
+import 'package:packagehub/design_system/components/ph_banner.dart';
+import 'package:packagehub/design_system/components/ph_bottom_sheet.dart';
+import 'package:packagehub/design_system/components/ph_empty_state.dart';
+import 'package:packagehub/design_system/components/ph_grouped_section.dart';
+import 'package:packagehub/design_system/components/ph_icon_button.dart';
+import 'package:packagehub/design_system/components/ph_list_row.dart';
+import 'package:packagehub/design_system/components/ph_navigation_header.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/features/credential/pickup_credential_detail_page.dart';
 import 'package:packagehub/map/pickup_zone.dart';
 import 'package:packagehub/map/pickup_zone_resolver.dart';
@@ -111,19 +120,21 @@ class StationMapPageState extends State<StationMapPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('站点地图'),
+      appBar: PHNavigationHeader(
+        title: '站点地图',
         actions: [
-          IconButton(
+          PHIconButton(
             key: const Key('station-rules-button'),
+            tooltip: '站点规则',
+            semanticsLabel: '站点规则',
             onPressed: () => showStationRulesSheet(context),
             icon: const Icon(CupertinoIcons.list_bullet),
-            tooltip: '站点规则',
           ),
-          IconButton(
+          PHIconButton(
+            tooltip: '重新加载',
+            semanticsLabel: '重新加载',
             onPressed: load,
             icon: const Icon(Icons.refresh),
-            tooltip: '重新加载',
           ),
         ],
       ),
@@ -131,14 +142,10 @@ class StationMapPageState extends State<StationMapPage> {
         children: [
           if (_loading) const LinearProgressIndicator(minHeight: 2),
           if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Text(_error!),
-                  TextButton(onPressed: load, child: const Text('重新加载')),
-                ],
-              ),
+            PHBanner(
+              variant: PHBannerVariant.error,
+              title: _error!,
+              action: TextButton(onPressed: load, child: const Text('重新加载')),
             ),
           Expanded(
             child: LayoutBuilder(
@@ -210,26 +217,25 @@ class StationMapPageState extends State<StationMapPage> {
             ),
           ),
           if (_groups[PickupZoneId.unmapped]?.isNotEmpty == true)
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 64),
-              child: ListTile(
-                title: Text('未定位 ${_groups[PickupZoneId.unmapped]!.length}'),
-                leading: const Icon(CupertinoIcons.question_circle),
-                onTap: () => _open(
-                  const StationMapZoneDefinition(
-                    id: PickupZoneId.unmapped,
-                    label: '未定位',
-                    subtitle: '需要确认区域',
-                    normalizedRect: Rect.fromLTRB(0, 0, 1, 1),
+            PHGroupedSection(
+              children: [
+                PHListRow(
+                  title: '未定位 ${_groups[PickupZoneId.unmapped]!.length}',
+                  leading: const Icon(CupertinoIcons.question_circle),
+                  onTap: () => _open(
+                    const StationMapZoneDefinition(
+                      id: PickupZoneId.unmapped,
+                      label: '未定位',
+                      subtitle: '需要确认区域',
+                      normalizedRect: Rect.fromLTRB(0, 0, 1, 1),
+                    ),
                   ),
+                  showSeparator: false,
                 ),
-              ),
+              ],
             )
           else if (!_loading && _groups.isEmpty)
-            ConstrainedBox(
-              constraints: BoxConstraints(minHeight: 64),
-              child: Center(child: Text('暂无待取件快递')),
-            ),
+            const PHEmptyState(title: '暂无待取件快递'),
         ],
       ),
     );
@@ -473,10 +479,7 @@ class _StationMapHotspotState extends State<_StationMapHotspot> {
   @override
   Widget build(BuildContext context) {
     final active = widget.count > 0;
-    final scheme = Theme.of(context).colorScheme;
-    final edge = Theme.of(context).brightness == Brightness.dark
-        ? scheme.surface
-        : Colors.white;
+    final colors = PHColorScheme.of(context);
     return Semantics(
       button: true,
       label: '${widget.zone.label}，${widget.zone.subtitle}，${widget.count} 件待取',
@@ -493,32 +496,17 @@ class _StationMapHotspotState extends State<_StationMapHotspot> {
                 decoration: StationMapHotspotStyle.decoration(
                   active: active,
                   pressed: pressed,
-                  accent: scheme.primary,
+                  accent: colors.iconAccent,
                 ),
               ),
             ),
             if (active)
               Align(
                 alignment: widget.zone.badgeAnchor,
-                child: Container(
+                child: PHBadge(
                   key: Key('mapBadge_${widget.zone.id.name}'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: StationMapHotspotStyle.badgeDecoration(
-                    accent: scheme.primary,
-                    edge: edge,
-                  ),
-                  child: Text(
-                    '${widget.count}',
-                    style: TextStyle(
-                      color: edge,
-                      fontSize: 12,
-                      height: 1.2,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  label: '${widget.count}',
+                  variant: PHBadgeVariant.accent,
                 ),
               ),
           ],
@@ -575,62 +563,35 @@ class _ZoneSheetState extends State<_ZoneSheet> {
 
   @override
   Widget build(BuildContext context) => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.max,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '${widget.zone.label} · ${widget.zone.subtitle}',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          Text(
-            '${items.length} 件',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          Expanded(
-            child: items.isEmpty
-                ? const Align(
-                    alignment: Alignment.topLeft,
-                    child: Padding(
-                      padding: EdgeInsets.only(top: 24),
-                      child: Text('这里暂时没有待取件快递'),
+    child: PHBottomSheet(
+      title: '${widget.zone.label} · ${widget.zone.subtitle}',
+      subtitle: '${items.length} 件',
+      child: Expanded(
+        child: items.isEmpty
+            ? const PHEmptyState(title: '这里暂时没有待取件快递')
+            : PHGroupedSection(
+                children: [
+                  for (var index = 0; index < items.length; index++)
+                    PHListRow(
+                      title: items[index].pickupCode?.trim().isNotEmpty == true
+                          ? items[index].pickupCode!
+                          : '无取件码',
+                      subtitle:
+                          '${items[index].courierCompany.displayName}${items[index].trackingNumber == null ? '' : '\n${items[index].trackingNumber}'}',
+                      onTap: () => widget.onOpenDetail(items[index]),
+                      showChevron: false,
+                      showSeparator: index < items.length - 1,
+                      trailing: PHIconButton(
+                        tooltip: '标记为已取件',
+                        semanticsLabel: '标记为已取件',
+                        onPressed: busy.contains(items[index].id)
+                            ? null
+                            : () => pick(items[index]),
+                        icon: const Icon(CupertinoIcons.check_mark_circled),
+                      ),
                     ),
-                  )
-                : ListView(
-                    padding: EdgeInsets.zero,
-                    children: items
-                        .map(
-                          (c) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            onTap: () => widget.onOpenDetail(c),
-                            title: Text(
-                              c.pickupCode?.trim().isNotEmpty == true
-                                  ? c.pickupCode!
-                                  : '无取件码',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            subtitle: Text(
-                              '${c.courierCompany.displayName}${c.trackingNumber == null ? '' : '\n${c.trackingNumber}'}',
-                            ),
-                            trailing: IconButton(
-                              tooltip: '标记为已取件',
-                              onPressed: busy.contains(c.id)
-                                  ? null
-                                  : () => pick(c),
-                              icon: const Icon(
-                                CupertinoIcons.check_mark_circled,
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-          ),
-        ],
+                ],
+              ),
       ),
     ),
   );

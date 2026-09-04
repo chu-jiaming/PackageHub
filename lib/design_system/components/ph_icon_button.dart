@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_radius.dart';
 import 'package:packagehub/design_system/tokens/ph_sizes.dart';
@@ -8,6 +9,7 @@ enum PHIconButtonVariant { plain, tinted, destructive }
 class PHIconButton extends StatelessWidget {
   final Widget icon;
   final String semanticsLabel;
+  final String? tooltip;
   final VoidCallback? onPressed;
   final PHIconButtonVariant variant;
 
@@ -15,6 +17,7 @@ class PHIconButton extends StatelessWidget {
     super.key,
     required this.icon,
     required this.semanticsLabel,
+    this.tooltip,
     required this.onPressed,
     this.variant = PHIconButtonVariant.plain,
   });
@@ -32,7 +35,7 @@ class PHIconButton extends StatelessWidget {
       PHIconButtonVariant.destructive => colors.bgDangerSubtle,
     };
 
-    return Semantics(
+    final button = Semantics(
       button: true,
       enabled: onPressed != null,
       label: semanticsLabel,
@@ -60,5 +63,6 @@ class PHIconButton extends StatelessWidget {
         ),
       ),
     );
+    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
   }
 }
