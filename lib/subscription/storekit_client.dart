@@ -49,9 +49,7 @@ class MethodChannelStoreKitClient implements StoreKitClient {
       );
       final status = result?['status'] as String?;
       return switch (status) {
-        'purchased' => const StorePurchaseResult.success(
-          StorePurchaseStatus.purchased,
-        ),
+        'purchased' => StorePurchaseResult.success(StorePurchaseStatus.purchased, signedTransaction: result?['signedTransaction'] as String?),
         'pending' => const StorePurchaseResult.success(
           StorePurchaseStatus.pending,
         ),
@@ -115,5 +113,9 @@ class MethodChannelStoreKitClient implements StoreKitClient {
     } on MissingPluginException {
       // Non-iOS platforms have no StoreKit implementation.
     }
+  }
+
+  Future<void> finishTransaction(String transactionId) async {
+    await _method.invokeMethod('finishTransaction', {'transactionId': transactionId});
   }
 }

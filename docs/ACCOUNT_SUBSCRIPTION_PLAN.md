@@ -92,3 +92,48 @@ Before production release:
 - [ ] Verify App Store Connect product IDs and production pricing metadata
 - [ ] Verify sandbox/TestFlight purchase and restore flows
 - [ ] Enter Phase 5 backend entitlement and device control
+
+## Phase 5 — Server subscription entitlement
+
+Phase 5 implementation uses Apple’s official `@apple/app-store-server-library`
+(`^3.1.0`). `POST /v1/me/subscription/transactions` accepts only the native
+StoreKit `jwsRepresentation`; the server verifies bundle ID, environment,
+certificate chain, and transaction claims with `SignedDataVerifier`. The
+`original_transaction_id` column is `UNIQUE`, while `user_id` is deliberately
+not unique so historical chains remain possible.
+
+`app_store_notification_events.notification_uuid` is unique and stores only
+notification metadata, not the complete JWS. `POST /v1/app-store/notifications`
+implements App Store Server Notifications V2 and is idempotent. Notifications
+and client confirmations both trigger `AppStoreServerAPIClient` reconciliation.
+
+The server binds a new transaction only when its verified `appAccountToken`
+matches the authenticated user. Missing tokens remain `unboundPurchase`; a
+token mismatch never changes ownership; an original transaction bound to a
+different account returns `subscriptionBoundToAnotherAccount` without
+revealing that account. Account deletion cascades PackageHub subscription and
+device data, does not cancel Apple subscriptions, and does not permit silent
+rebinding of old Apple transactions.
+
+`GET /v1/me/entitlement` is the release authority. It atomically claims one of
+at most two active Pro device slots using PostgreSQL row locks and returns a
+short-lived ES256 PackageHub token (24–72 hours, default 48). Claims contain
+only issuer, user, device, state, product, issued-at, expiry, key id, and the
+Pro decision. Device removal revokes its sessions and Pro binding.
+
+Required backend variables are documented in `backend/.env.example`. Sandbox
+and production are selected through the official library’s `Environment`; no
+legacy iTunes endpoint is used. Real Apple keys, root certificates, JWS values,
+and `.env` files are never committed.
+
+Apple setup checklist (manual, parallel to development):
+
+- [ ] App ID `com.charm1ng.packagehub` and Sign in with Apple enabled
+- [ ] Separate Sign in with Apple key and App Store Connect In-App Purchase key
+- [ ] PackageHub App, subscription group, product, pricing, and localization
+- [ ] Issuer ID, key ID, `.p8`, app Apple ID, and Apple root certificates configured
+- [ ] Sandbox and Production App Store Server Notifications V2 URLs configured
+- [ ] Real Sandbox/TestFlight SIWA, purchase, restore, reconciliation, and notification E2E
+
+Phase 4 implementation remains complete in code but E2E pending; Phase 4 and
+Phase 5 are not formally complete until the real Apple flow above passes.

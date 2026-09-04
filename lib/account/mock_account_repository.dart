@@ -5,6 +5,8 @@ import 'account_device.dart';
 class MockAccountRepository implements AccountRepository {
   @override
   final AccountState current;
+  @override
+  String? get accessToken => null;
 
   const MockAccountRepository({this.current = const AccountState.signedOut()});
 

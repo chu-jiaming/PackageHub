@@ -27,6 +27,15 @@ class StoreKitContext {
   const StoreKitContext(this.appAccountToken);
 }
 
+class BackendEntitlement {
+  final String state;
+  final bool isPro;
+  final String? productId, planDisplayName, expiresAt, signedEntitlementToken;
+  final bool autoRenewEnabled;
+  final String deviceAccess;
+  const BackendEntitlement({required this.state, required this.isPro, this.productId, this.planDisplayName, this.expiresAt, this.signedEntitlementToken, this.autoRenewEnabled=false, this.deviceAccess='allowed'});
+}
+
 class AccountApiClient {
   final String baseUrl;
   final http.Client client;
@@ -128,6 +137,18 @@ class AccountApiClient {
     }
     return StoreKitContext((jsonDecode(r.body)['appAccountToken'] as String));
   }
+
+  Future<String> confirmTransaction(String accessToken, String signedTransaction) async {
+    final r=await client.post(_uri('/v1/me/subscription/transactions'),headers:{'authorization':'Bearer $accessToken','content-type':'application/json'},body:jsonEncode({'signedTransaction':signedTransaction}));
+    if(r.statusCode>=400) throw AccountApiException(r.statusCode,(jsonDecode(r.body) as Map)['error']?.toString()??'subscription_failed');
+    return (jsonDecode(r.body)['result'] as String?)??'accepted';
+  }
+  Future<BackendEntitlement> entitlement(String accessToken) async {
+    final r=await client.get(_uri('/v1/me/entitlement'),headers:{'authorization':'Bearer $accessToken'});
+    if(r.statusCode>=400) throw AccountApiException(r.statusCode,'entitlement_failed');
+    final j=jsonDecode(r.body); return BackendEntitlement(state:j['state'],isPro:j['isPro']??false,productId:j['productId'],planDisplayName:j['planDisplayName'],expiresAt:j['expiresAt'],signedEntitlementToken:j['signedEntitlementToken'],autoRenewEnabled:j['autoRenewEnabled']??false,deviceAccess:j['deviceAccess']??'allowed');
+  }
+  Future<void> removeDevice(String accessToken,String deviceId) async { final r=await client.delete(_uri('/v1/me/devices/$deviceId'),headers:{'authorization':'Bearer $accessToken'}); if(r.statusCode>=400) throw AccountApiException(r.statusCode,'device_remove_failed'); }
 
   AccountSession _session(http.Response r) {
     if (r.statusCode >= 400) {

@@ -35,6 +35,7 @@ import 'package:packagehub/subscription/pro_feature_access.dart';
 import 'package:packagehub/subscription/pro_upgrade_sheet.dart';
 import 'package:packagehub/subscription/storekit_client.dart';
 import 'package:packagehub/subscription/storekit_subscription_repository.dart';
+import 'package:packagehub/subscription/backend_subscription_repository.dart';
 import 'package:packagehub/subscription/debug/debug_subscription_override.dart';
 
 void main() {
@@ -51,11 +52,17 @@ void main() {
     client: MethodChannelStoreKitClient(),
     accountRepository: account,
   );
+  final subscription = baseUrl.isEmpty ? storeKit : BackendSubscriptionRepository(
+    account: account,
+    api: AccountApiClient(baseUrl),
+    storeKit: MethodChannelStoreKitClient(),
+    verifier: const RejectingEntitlementTokenVerifier(),
+  );
   runApp(
     PackageHubApp(
       repository: repository,
       accountRepository: account,
-      subscriptionRepository: DebugSubscriptionOverrideRepository(storeKit),
+      subscriptionRepository: DebugSubscriptionOverrideRepository(subscription),
     ),
   );
 }

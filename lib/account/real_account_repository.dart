@@ -32,6 +32,8 @@ class RealAccountRepository implements AccountRepository {
   @override
   AccountState get current => _state;
   @override
+  String? get accessToken => _access;
+  @override
   Stream<AccountState> get changes => _changes.stream;
   void _set(AccountState s) {
     _state = s;
@@ -95,6 +97,7 @@ class RealAccountRepository implements AccountRepository {
     if (a != null && api != null) await api!.logout(a).catchError((_) {});
     _access = null;
     await tokens.clearRefreshToken();
+    // The entitlement token is device/user bound; the subscription repository clears its cache on sign-out.
     _set(const AccountState.signedOut());
   }
 

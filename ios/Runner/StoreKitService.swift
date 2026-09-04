@@ -36,7 +36,19 @@ final class StoreKitService: NSObject, FlutterStreamHandler {
         do { try await AppStore.sync(); result(nil) }
         catch { result(FlutterError(code: "NETWORK_UNAVAILABLE", message: nil, details: nil)) }
       }
+    case "finishTransaction":
+      guard let raw = args["transactionId"] as? String, let id = UInt64(raw) else { result(FlutterError(code: "INVALID_ARGUMENTS", message: nil, details: nil)); return }
+      Task { await self.finishTransaction(id); result(nil) }
     default: result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func finishTransaction(_ id: UInt64) async {
+    for await verification in Transaction.currentEntitlements {
+      if case .verified(let transaction) = verification, transaction.id == id {
+        await transaction.finish()
+        return
+      }
     }
   }
 
@@ -60,8 +72,7 @@ final class StoreKitService: NSObject, FlutterStreamHandler {
         switch verification {
         case .verified(let transaction):
           guard transaction.appAccountToken == uuid else { return ["status": "accountTokenMismatch"] }
-          await transaction.finish()
-          return ["status": "purchased"]
+          return ["status": "purchased", "signedTransaction": verification.jwsRepresentation]
         case .unverified: return ["status": "verificationFailed"]
         }
       case .pending: return ["status": "pending"]
@@ -94,7 +105,7 @@ final class StoreKitService: NSObject, FlutterStreamHandler {
           autoRenewEnabled = renewalInfo.willAutoRenew
         }
       }
-      values.append(["productId": transaction.productID,
+      values.append(["transactionId": String(transaction.id), "signedTransaction": verification.jwsRepresentation, "productId": transaction.productID,
                      "appAccountToken": transaction.appAccountToken?.uuidString as Any,
                      "state": state,
                      "expiresAt": transaction.expirationDate?.ISO8601Format() as Any,
@@ -105,7 +116,6 @@ final class StoreKitService: NSObject, FlutterStreamHandler {
 
   private func handleUpdate(_ result: VerificationResult<Transaction>) async {
     guard case .verified(let transaction) = result else { return }
-    await transaction.finish()
     eventSink?( ["type": "transactionUpdated"] )
   }
 

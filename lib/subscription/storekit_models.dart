@@ -43,8 +43,9 @@ enum StorePurchaseError {
 class StorePurchaseResult {
   final StorePurchaseStatus? status;
   final StorePurchaseError? error;
-  const StorePurchaseResult.success(this.status) : error = null;
-  const StorePurchaseResult.failure(this.error) : status = null;
+  final String? signedTransaction;
+  const StorePurchaseResult.success(this.status, {this.signedTransaction}) : error = null;
+  const StorePurchaseResult.failure(this.error) : status = null, signedTransaction = null;
 }
 
 class StoreKitEvent {
@@ -58,6 +59,7 @@ class StoreKitEntitlement {
   final SubscriptionState state;
   final DateTime? expiresAt;
   final bool autoRenewEnabled;
+  final String? signedTransaction;
 
   const StoreKitEntitlement({
     required this.productId,
@@ -65,6 +67,7 @@ class StoreKitEntitlement {
     this.appAccountToken,
     this.expiresAt,
     this.autoRenewEnabled = false,
+    this.signedTransaction,
   });
 
   factory StoreKitEntitlement.fromMap(Map<Object?, Object?> map) =>
@@ -76,6 +79,7 @@ class StoreKitEntitlement {
             ? DateTime.tryParse(map['expiresAt'] as String)
             : null,
         autoRenewEnabled: map['autoRenewEnabled'] as bool? ?? false,
+        signedTransaction: map['signedTransaction'] as String?,
       );
 
   static SubscriptionState _state(String? value) => switch (value) {
