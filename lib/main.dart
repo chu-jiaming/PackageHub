@@ -37,7 +37,18 @@ import 'package:packagehub/subscription/storekit_client.dart';
 import 'package:packagehub/subscription/storekit_subscription_repository.dart';
 import 'package:packagehub/subscription/backend_subscription_repository.dart';
 import 'package:packagehub/subscription/debug/debug_subscription_override.dart';
+import 'package:packagehub/design_system/components/ph_banner.dart';
+import 'package:packagehub/design_system/components/ph_bottom_action_bar.dart';
+import 'package:packagehub/design_system/components/ph_bottom_navigation.dart';
+import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/components/ph_courier_section_header.dart';
+import 'package:packagehub/design_system/components/ph_empty_state.dart';
+import 'package:packagehub/design_system/components/ph_icon_button.dart';
+import 'package:packagehub/design_system/components/ph_navigation_header.dart';
+import 'package:packagehub/design_system/components/ph_section_header.dart';
 import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
+import 'package:packagehub/design_system/tokens/ph_typography.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -199,19 +210,19 @@ class _PackageHubShellState extends State<PackageHubShell> {
               ),
             ],
           ),
-          bottomNavigationBar: NavigationBar(
+          bottomNavigationBar: PHBottomNavigation(
             selectedIndex: _index,
             onDestinationSelected: _selectTab,
-            destinations: const [
-              NavigationDestination(
+            items: const [
+              PHBottomNavigationItem(
                 icon: Icon(Icons.inventory_2_outlined),
                 label: '取件',
               ),
-              NavigationDestination(
+              PHBottomNavigationItem(
                 icon: Icon(CupertinoIcons.map),
                 label: '地图',
               ),
-              NavigationDestination(
+              PHBottomNavigationItem(
                 icon: Icon(Icons.qr_code_2_outlined),
                 label: '身份码',
               ),
@@ -838,19 +849,22 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        surfaceTintColor: Colors.transparent,
-        title: const Text(
-          'PackageHub',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
+      appBar: PHNavigationHeader(
+        title: 'PackageHub',
+        leading: !_isSelectionMode
+            ? PHIconButton(
+                key: const Key('accountAvatarButton'),
+                icon: const Icon(Icons.account_circle, size: 34),
+                semanticsLabel: '账户',
+                onPressed: widget.onAccountTap,
+              )
+            : null,
         actions: [
           if (!_isSelectionMode)
-            IconButton(
+            PHIconButton(
               key: const Key('pickupReminderSettingsButton'),
-              tooltip: '取件提醒设置',
               icon: const Icon(Icons.notifications_outlined),
+              semanticsLabel: '取件提醒设置',
               onPressed: _openReminderSettings,
             ),
           if (_isSelectionMode) ...[
@@ -873,32 +887,15 @@ class _HomePageState extends State<HomePage> {
               child: const Text('批量操作'),
             ),
         ],
-        leading: !_isSelectionMode
-            ? Semantics(
-                button: true,
-                label: '账户',
-                child: IconButton(
-                  key: const Key('accountAvatarButton'),
-                  tooltip: '账户',
-                  constraints: const BoxConstraints(
-                    minWidth: 44,
-                    minHeight: 44,
-                  ),
-                  icon: const Icon(Icons.account_circle, size: 34),
-                  onPressed: widget.onAccountTap,
-                ),
-              )
-            : null,
       ),
       body: SafeArea(child: _buildBody()),
       bottomNavigationBar: _isSelectionMode ? _buildBatchActionBar() : null,
       floatingActionButton: _isSelectionMode
           ? null
-          : FloatingActionButton.extended(
-              heroTag: 'addScreenshot',
+          : PHButton(
+              leading: const Icon(Icons.add_photo_alternate_outlined),
               onPressed: _isSaving ? null : _pickScreenshot,
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: const Text('添加截图'),
+              label: '添加截图',
             ),
     );
   }
@@ -926,13 +923,11 @@ class _HomePageState extends State<HomePage> {
     return Column(
       children: [
         if (due.isNotEmpty)
-          MaterialBanner(
+          PHBanner(
             key: const Key('pickupReminderBanner'),
+            variant: PHBannerVariant.warning,
             leading: const Icon(Icons.notifications_active_outlined),
-            content: Text(
-              '有 ${due.length} 个包裹已超过 ${_reminderSettings.days} 天未取件',
-            ),
-            actions: const [SizedBox.shrink()],
+            title: '有 ${due.length} 个包裹已超过 ${_reminderSettings.days} 天未取件',
           ),
         if (_saveErrorMessage != null) _buildSaveErrorBanner(),
         Expanded(child: body),
@@ -941,60 +936,35 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildErrorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              _errorMessage!,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.tonal(
-              onPressed: _loadCredentials,
-              child: const Text('重试'),
-            ),
-          ],
-        ),
+    return PHEmptyState(
+      icon: const Icon(Icons.error_outline),
+      title: _errorMessage!,
+      action: PHButton(
+        variant: PHButtonVariant.secondary,
+        onPressed: _loadCredentials,
+        label: '重试',
       ),
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
-            const SizedBox(height: 20),
-            const Text(
-              '暂无取件凭证',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            Column(
-              children: [
-                Text(
-                  '添加快递截图后，',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-                ),
-                Text(
-                  'PackageHub 会自动识别取件信息。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-                ),
-              ],
-            ),
-          ],
-        ),
+    final colors = PHColorScheme.of(context);
+    return PHEmptyState(
+      icon: const Icon(Icons.inbox_outlined),
+      title: '暂无取件凭证',
+      action: Column(
+        children: [
+          Text(
+            '添加快递截图后，',
+            textAlign: TextAlign.center,
+            style: PHTypography.body.copyWith(color: colors.textSecondary),
+          ),
+          Text(
+            'PackageHub 会自动识别取件信息。',
+            textAlign: TextAlign.center,
+            style: PHTypography.body.copyWith(color: colors.textSecondary),
+          ),
+        ],
       ),
     );
   }
@@ -1002,30 +972,15 @@ class _HomePageState extends State<HomePage> {
   Widget _buildSaveErrorBanner() {
     final retryDrafts = _draftsWaitingForRetry;
 
-    return Material(
-      color: Theme.of(context).colorScheme.errorContainer,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _saveErrorMessage!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            TextButton(
-              key: const Key('retrySaveButton'),
-              onPressed: _isSaving || retryDrafts == null
-                  ? null
-                  : () => _saveDrafts(retryDrafts),
-              child: const Text('重试'),
-            ),
-          ],
-        ),
+    return PHBanner(
+      variant: PHBannerVariant.error,
+      title: _saveErrorMessage!,
+      action: TextButton(
+        key: const Key('retrySaveButton'),
+        onPressed: _isSaving || retryDrafts == null
+            ? null
+            : () => _saveDrafts(retryDrafts),
+        child: const Text('重试'),
       ),
     );
   }
@@ -1044,17 +999,21 @@ class _HomePageState extends State<HomePage> {
     return RefreshIndicator(
       onRefresh: _loadCredentials,
       child: ListView(
-        padding: EdgeInsets.fromLTRB(16, 8, 16, _isSelectionMode ? 24 : 96),
+        padding: EdgeInsets.fromLTRB(
+          PHSpacing.md,
+          PHSpacing.sm,
+          PHSpacing.md,
+          _isSelectionMode ? PHSpacing.lg : 96,
+        ),
         children: [
           if (_isSelectionMode)
             Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.only(bottom: PHSpacing.sm),
               child: Text(
                 _selectionCountText,
                 key: const Key('selectedCredentialCount'),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                style: PHTypography.bodyEmphasis.copyWith(
+                  color: PHColorScheme.of(context).textPrimary,
                 ),
               ),
             ),
@@ -1080,14 +1039,7 @@ class _HomePageState extends State<HomePage> {
         key: Key('credentialSection-$title'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10, top: 8),
-            child: Text(
-              '$title · ${credentials.length}',
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
+          PHSectionHeader(title: '$title · ${credentials.length}'),
           for (final group in groupCredentialsByCourier(credentials))
             _buildCourierGroup(group),
         ],
@@ -1101,19 +1053,19 @@ class _HomePageState extends State<HomePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 6),
-          child: Text(
-            '${group.courierCompany.displayName} · ${group.credentials.length}',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: Theme.of(context).colorScheme.secondary,
-            ),
+          padding: const EdgeInsets.only(
+            top: PHSpacing.sm,
+            bottom: PHSpacing.xs,
+          ),
+          child: PHCourierSectionHeader(
+            title:
+                '${group.courierCompany.displayName} · ${group.credentials.length}',
+            leading: const Icon(Icons.local_shipping_outlined),
           ),
         ),
         for (final credential in group.credentials)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: PHSpacing.sm),
             child: PickupCredentialCard(
               credential: credential,
               isSelectionMode: _isSelectionMode,
@@ -1134,7 +1086,7 @@ class _HomePageState extends State<HomePage> {
               showCourierCompany: false,
             ),
           ),
-        const SizedBox(height: 8),
+        const SizedBox(height: PHSpacing.sm),
       ],
     );
   }
@@ -1142,60 +1094,40 @@ class _HomePageState extends State<HomePage> {
   Widget _buildBatchActionBar() {
     final hasSelection = _hasSelection;
     final canOperate = hasSelection && !_isBatchOperating;
+    final colors = PHColorScheme.of(context);
 
-    return SafeArea(
-      child: Material(
-        color: Theme.of(context).colorScheme.surface,
-        elevation: 8,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _isBatchOperating ? '处理中...' : _selectionCountText,
-                  key: const Key('batchSelectedCredentialCount'),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.tonal(
-                      key: const Key('batchMarkPickedUpButton'),
-                      onPressed: canOperate ? _markSelectedPickedUp : null,
-                      child: const Text('已取件'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.tonal(
-                      key: const Key('batchMarkPendingButton'),
-                      onPressed: canOperate ? _markSelectedPending : null,
-                      child: const Text('恢复待取件'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton(
-                      key: const Key('batchDeleteButton'),
-                      onPressed: canOperate ? _confirmDeleteSelected : null,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.error,
-                        foregroundColor: Theme.of(context).colorScheme.onError,
-                      ),
-                      child: const Text('删除'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+    return PHBottomActionBar(
+      header: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          _isBatchOperating ? '处理中...' : _selectionCountText,
+          key: const Key('batchSelectedCredentialCount'),
+          style: PHTypography.bodyEmphasis.copyWith(
+            color: PHColorScheme.of(context).textPrimary,
           ),
         ),
       ),
+      actions: [
+        FilledButton.tonal(
+          key: const Key('batchMarkPickedUpButton'),
+          onPressed: canOperate ? _markSelectedPickedUp : null,
+          child: const Text('已取件'),
+        ),
+        FilledButton.tonal(
+          key: const Key('batchMarkPendingButton'),
+          onPressed: canOperate ? _markSelectedPending : null,
+          child: const Text('恢复待取件'),
+        ),
+        FilledButton(
+          key: const Key('batchDeleteButton'),
+          onPressed: canOperate ? _confirmDeleteSelected : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: colors.bgDanger,
+            foregroundColor: colors.textInverse,
+          ),
+          child: const Text('删除'),
+        ),
+      ],
     );
   }
 }
