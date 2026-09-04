@@ -10,6 +10,7 @@ class PHImportStatusCard extends StatelessWidget {
   final PHImportStatus status;
   final String title;
   final String? message;
+  final Widget? details;
   final double? progress;
   final Widget? preview;
   final Widget? trailing;
@@ -21,6 +22,7 @@ class PHImportStatusCard extends StatelessWidget {
     required this.status,
     required this.title,
     this.message,
+    this.details,
     this.progress,
     this.preview,
     this.trailing,
@@ -81,6 +83,10 @@ class PHImportStatusCard extends StatelessWidget {
                         color: colors.textSecondary,
                       ),
                     ),
+                  if (details != null) ...[
+                    const SizedBox(height: PHSpacing.xs),
+                    details!,
+                  ],
                   if (progress != null) ...[
                     const SizedBox(height: PHSpacing.xs),
                     LinearProgressIndicator(

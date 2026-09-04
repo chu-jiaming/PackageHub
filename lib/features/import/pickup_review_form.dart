@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:packagehub/core/parser/pickup_parser.dart';
+import 'package:packagehub/design_system/components/ph_banner.dart';
+import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/components/ph_select_field.dart';
+import 'package:packagehub/design_system/components/ph_text_field.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
+import 'package:packagehub/design_system/tokens/ph_radius.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
+import 'package:packagehub/design_system/tokens/ph_typography.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
 import 'package:packagehub/recognition/recognition_evidence.dart';
 
@@ -125,15 +133,9 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<CourierCompany>(
+        PHSelectField<CourierCompany>(
           key: const Key('courierCompanyField'),
-          initialValue: _selectedCourierCompany,
-          decoration: InputDecoration(
-            labelText: '快递公司',
-            filled: true,
-            border: InputBorder.none,
-            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
+          value: _selectedCourierCompany,
           items: CourierCompany.values.map((company) {
             return DropdownMenuItem(
               value: company,
@@ -141,41 +143,26 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
             );
           }).toList(),
           onChanged: _updateCourierCompany,
+          label: '快递公司',
         ),
-        const SizedBox(height: 16),
-        TextFormField(
-          key: const Key('pickupCodeField'),
+        const SizedBox(height: PHSpacing.md),
+        PHTextField(
+          fieldKey: const Key('pickupCodeField'),
           controller: _pickupCodeController,
           textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            labelText: '取件码',
-            filled: true,
-            border: InputBorder.none,
-            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
+          label: '取件码',
         ),
-        const SizedBox(height: 16),
-        TextFormField(
-          key: const Key('trackingNumberField'),
+        const SizedBox(height: PHSpacing.md),
+        PHTextField(
+          fieldKey: const Key('trackingNumberField'),
           controller: _trackingNumberController,
           textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            labelText: '运单号',
-            filled: true,
-            border: InputBorder.none,
-            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
+          label: '运单号',
         ),
-        const SizedBox(height: 16),
-        DropdownButtonFormField<PickupStatus>(
+        const SizedBox(height: PHSpacing.md),
+        PHSelectField<PickupStatus>(
           key: const Key('statusField'),
-          initialValue: _selectedStatus,
-          decoration: InputDecoration(
-            labelText: '状态',
-            filled: true,
-            border: InputBorder.none,
-            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
+          value: _selectedStatus,
           items: PickupStatus.values.map((status) {
             return DropdownMenuItem(
               value: status,
@@ -183,24 +170,24 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
             );
           }).toList(),
           onChanged: _updateStatus,
+          label: '状态',
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: PHSpacing.sm),
         Text(
           '识别来源：${widget.draft.sourcePlatform.displayName}',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          style: PHTypography.footnote.copyWith(
+            color: PHColorScheme.of(context).textSecondary,
+          ),
         ),
         ..._evidenceLabels(),
         ..._conflictLabels(),
-        const SizedBox(height: 2),
+        const SizedBox(height: PHSpacing.xxs),
         _RawTextTile(text: widget.draft.rawText),
-        const SizedBox(height: 18),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton(
-            key: widget.completeButtonKey,
-            onPressed: _complete,
-            child: Text(widget.completeButtonLabel),
-          ),
+        const SizedBox(height: PHSpacing.lg),
+        PHButton(
+          key: widget.completeButtonKey,
+          onPressed: _complete,
+          label: widget.completeButtonLabel,
         ),
       ],
     );
@@ -208,6 +195,7 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
 
   List<Widget> _evidenceLabels() {
     final labels = <Widget>[];
+    final colors = PHColorScheme.of(context);
     for (final field in RecognitionField.values) {
       final item = widget.draft.evidence
           .where((e) => e.field == field)
@@ -216,7 +204,7 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
       labels.add(
         Text(
           '${_fieldName(field)}：${_evidenceLabel(item)}',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          style: PHTypography.footnote.copyWith(color: colors.textSecondary),
         ),
       );
     }
@@ -231,17 +219,18 @@ class _PickupReviewFormState extends State<PickupReviewForm> {
   }
 
   List<Widget> _conflictLabels() {
+    final colors = PHColorScheme.of(context);
     return [
       for (final conflict in widget.draft.conflicts) ...[
-        const SizedBox(height: 8),
-        Text(
-          '检测到多个可能结果，请确认',
-          style: TextStyle(fontSize: 13, color: Colors.orange.shade800),
+        const SizedBox(height: PHSpacing.sm),
+        const PHBanner(
+          variant: PHBannerVariant.warning,
+          title: '检测到多个可能结果，请确认',
         ),
         for (final alternative in conflict.alternatives)
           Text(
             '${_fieldName(conflict.field)}：${_displayValue(alternative.value)}',
-            style: TextStyle(fontSize: 13, color: Colors.orange.shade800),
+            style: PHTypography.footnote.copyWith(color: colors.textWarning),
           ),
       ],
     ];
@@ -266,32 +255,36 @@ class _RawTextTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
     return Material(
       color: Colors.transparent,
       child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        data: Theme.of(context).copyWith(dividerColor: colors.separatorDefault),
         child: ExpansionTile(
           tilePadding: EdgeInsets.zero,
           childrenPadding: EdgeInsets.zero,
           initiallyExpanded: false,
           title: const Text(
             '查看原始识别文本',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            style: TextStyle(fontWeight: FontWeight.w700),
           ),
           children: [
             Container(
               width: double.infinity,
               constraints: const BoxConstraints(maxHeight: 180),
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(PHSpacing.md),
               decoration: BoxDecoration(
-                color: const Color(0xFFF7F8FA),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                color: colors.bgSurfaceSecondary,
+                borderRadius: BorderRadius.circular(PHRadius.sm),
+                border: Border.all(color: colors.borderDefault),
               ),
               child: SingleChildScrollView(
                 child: SelectableText(
                   text,
-                  style: const TextStyle(height: 1.5),
+                  style: PHTypography.body.copyWith(
+                    color: colors.textPrimary,
+                    height: 1.5,
+                  ),
                 ),
               ),
             ),

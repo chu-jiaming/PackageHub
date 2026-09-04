@@ -1,6 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:packagehub/design_system/components/ph_bottom_action_bar.dart';
+import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/components/ph_empty_state.dart';
+import 'package:packagehub/design_system/components/ph_grouped_section.dart';
+import 'package:packagehub/design_system/components/ph_navigation_header.dart';
+import 'package:packagehub/design_system/components/ph_section_header.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
+import 'package:packagehub/design_system/tokens/ph_radius.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
+import 'package:packagehub/design_system/tokens/ph_typography.dart';
 import 'package:packagehub/features/import/image_preview_page.dart';
 import 'package:packagehub/features/import/pickup_review_form.dart';
 import 'package:packagehub/features/import/pickup_review_item.dart';
@@ -132,36 +142,35 @@ class _BatchReviewPageState extends State<BatchReviewPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('确认取件信息')),
+      appBar: PHNavigationHeader(
+        title: '确认取件信息',
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          padding: const EdgeInsets.fromLTRB(
+            PHSpacing.md,
+            PHSpacing.xs,
+            PHSpacing.md,
+            PHSpacing.md,
+          ),
           children: [
-            const Text(
-              '确认取件信息',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
+            const PHSectionHeader(title: '确认取件信息'),
             Text(
               '${_groups.fold<int>(0, (sum, group) => sum + group.drafts.length)} 个识别结果',
               key: const Key('batchReviewCountText'),
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+              style: PHTypography.subheadline.copyWith(
+                color: PHColorScheme.of(context).textSecondary,
+              ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: PHSpacing.md),
             if (_groups.isEmpty ||
                 _groups.every((group) => group.drafts.isEmpty))
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
-                ),
-                child: Text(
-                  '暂无可核对的取件信息',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              )
+              const PHEmptyState(title: '暂无可核对的取件信息')
             else if (widget.legacyFlat)
               for (var index = 0; index < _groups.length; index++) ...[
                 _BatchReviewCard(
@@ -200,29 +209,21 @@ class _BatchReviewPageState extends State<BatchReviewPage> {
                     onPreviewImage: () =>
                         _previewImage(_groups[groupIndex].imagePath),
                   ),
-                const SizedBox(height: 12),
+                const SizedBox(height: PHSpacing.sm),
               ],
           ],
         ),
       ),
-      bottomNavigationBar: Material(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                key: const Key('confirmAllButton'),
-                onPressed: _groups.every((group) => group.drafts.isEmpty)
-                    ? null
-                    : _confirmAll,
-                child: const Text('确认全部'),
-              ),
-            ),
+      bottomNavigationBar: PHBottomActionBar(
+        actions: [
+          PHButton(
+            key: const Key('confirmAllButton'),
+            onPressed: _groups.every((group) => group.drafts.isEmpty)
+                ? null
+                : _confirmAll,
+            label: '确认全部',
           ),
-        ),
+        ],
       ),
     );
   }
@@ -319,14 +320,13 @@ class _BatchReviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: isEditing ? _buildEditingContent() : _buildCompactContent(),
+    return PHGroupedSection(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(PHSpacing.md),
+          child: isEditing ? _buildEditingContent() : _buildCompactContent(),
+        ),
+      ],
     );
   }
 
@@ -444,18 +444,19 @@ class _ReviewScreenshotPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
     return InkWell(
       onTap: imagePath.isEmpty ? null : onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(PHRadius.sm),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(PHRadius.sm),
         child: SizedBox(
           width: width,
           height: height,
           child: ColoredBox(
-            color: Colors.black,
+            color: colors.bgCanvas,
             child: imagePath.isEmpty
-                ? Icon(Icons.image_outlined, color: Colors.grey.shade500)
+                ? Icon(Icons.image_outlined, color: colors.iconSecondary)
                 : Image.file(
                     File(imagePath),
                     fit: BoxFit.contain,
@@ -463,7 +464,7 @@ class _ReviewScreenshotPreview extends StatelessWidget {
                     errorBuilder: (context, error, stackTrace) {
                       return Icon(
                         Icons.image_not_supported_outlined,
-                        color: Colors.grey.shade500,
+                        color: colors.iconSecondary,
                       );
                     },
                   ),

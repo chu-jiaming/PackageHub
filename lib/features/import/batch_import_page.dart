@@ -4,6 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:packagehub/core/ocr/ocr_service.dart';
 import 'package:packagehub/core/parser/pickup_parser.dart';
+import 'package:packagehub/design_system/components/ph_bottom_action_bar.dart';
+import 'package:packagehub/design_system/components/ph_button.dart';
+import 'package:packagehub/design_system/components/ph_empty_state.dart';
+import 'package:packagehub/design_system/components/ph_import_status_card.dart';
+import 'package:packagehub/design_system/components/ph_navigation_header.dart';
+import 'package:packagehub/design_system/components/ph_section_header.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
+import 'package:packagehub/design_system/tokens/ph_radius.dart';
+import 'package:packagehub/design_system/tokens/ph_spacing.dart';
+import 'package:packagehub/design_system/tokens/ph_typography.dart';
 import 'package:packagehub/features/import/batch_import_item.dart';
 import 'package:packagehub/features/import/batch_review_page.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
@@ -231,52 +241,72 @@ class _BatchImportPageState extends State<BatchImportPage> {
         : '正在识别 $_finishedCount / ${_items.length}';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('批量导入')),
+      appBar: PHNavigationHeader(
+        title: '批量导入',
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              padding: const EdgeInsets.only(bottom: PHSpacing.sm),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(width: double.infinity),
-                  const Text(
-                    '批量导入',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                  const PHSectionHeader(title: '批量导入'),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: PHSpacing.md,
+                    ),
+                    child: Text(
+                      '${_items.length} 张截图',
+                      key: const Key('batchImportCountText'),
+                      style: PHTypography.subheadline.copyWith(
+                        color: PHColorScheme.of(context).textSecondary,
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_items.length} 张截图',
-                    key: const Key('batchImportCountText'),
-                    style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-                  ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: PHSpacing.sm),
                   LinearProgressIndicator(
                     value: _items.isEmpty ? 0 : _finishedCount / _items.length,
+                    color: PHColorScheme.of(context).iconAccent,
+                    backgroundColor: PHColorScheme.of(context).bgDisabled,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    progressText,
-                    key: const Key('batchImportProgressText'),
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      PHSpacing.md,
+                      PHSpacing.xs,
+                      PHSpacing.md,
+                      0,
+                    ),
+                    child: Text(
+                      progressText,
+                      key: const Key('batchImportProgressText'),
+                      style: PHTypography.footnote.copyWith(
+                        color: PHColorScheme.of(context).textSecondary,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
             Expanded(
               child: _items.isEmpty
-                  ? Center(
-                      child: Text(
-                        '暂无截图',
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    )
+                  ? const PHEmptyState(title: '暂无截图')
                   : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                      padding: const EdgeInsets.fromLTRB(
+                        PHSpacing.md,
+                        PHSpacing.xs,
+                        PHSpacing.md,
+                        PHSpacing.md,
+                      ),
                       itemCount: _items.length,
                       separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
+                          const SizedBox(height: PHSpacing.sm),
                       itemBuilder: (context, index) {
                         return _BatchImportCard(
                           key: Key('batchImportItem_$index'),
@@ -289,17 +319,16 @@ class _BatchImportPageState extends State<BatchImportPage> {
                       },
                     ),
             ),
-            Container(
-              width: double.infinity,
-              color: Colors.white,
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-              child: FilledButton(
-                key: const Key('openBatchReviewButton'),
-                onPressed: _isFinished && _successCount > 0
-                    ? _openBatchReview
-                    : null,
-                child: const Text('核对取件信息'),
-              ),
+            PHBottomActionBar(
+              actions: [
+                PHButton(
+                  key: const Key('openBatchReviewButton'),
+                  onPressed: _isFinished && _successCount > 0
+                      ? _openBatchReview
+                      : null,
+                  label: '核对取件信息',
+                ),
+              ],
             ),
           ],
         ),
@@ -326,24 +355,25 @@ class _BatchImportCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ScreenshotThumbnail(imagePath: item.imagePath),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _BatchImportDetails(item: item, index: index),
-          ),
-          if (item.status == BatchImportStatus.failed ||
-              item.status == BatchImportStatus.success)
-            Column(
+    final status = switch (item.status) {
+      BatchImportStatus.pending => PHImportStatus.waiting,
+      BatchImportStatus.recognizing => PHImportStatus.recognizing,
+      BatchImportStatus.success => PHImportStatus.success,
+      BatchImportStatus.failed => PHImportStatus.failed,
+    };
+    final statusText = _BatchImportDetails.statusText(item.status);
+    return PHImportStatusCard(
+      status: status,
+      title: _BatchImportDetails.titleText(item, index),
+      message: item.errorMessage == null
+          ? statusText
+          : '$statusText：${item.errorMessage}',
+      preview: _ScreenshotThumbnail(imagePath: item.imagePath),
+      details: _BatchImportDetails(item: item, index: index),
+      trailing:
+          item.status == BatchImportStatus.failed ||
+              item.status == BatchImportStatus.success
+          ? Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -359,9 +389,8 @@ class _BatchImportCard extends StatelessWidget {
                   child: const Text('移除'),
                 ),
               ],
-            ),
-        ],
-      ),
+            )
+          : null,
     );
   }
 }
@@ -373,18 +402,19 @@ class _ScreenshotThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(PHRadius.sm),
       child: SizedBox.square(
         dimension: 64,
         child: ColoredBox(
-          color: const Color(0xFFF3F4F6),
+          color: colors.bgSurfaceSecondary,
           child: Image.file(
             File(imagePath),
             fit: BoxFit.contain,
             cacheWidth: 240,
             errorBuilder: (context, error, stackTrace) {
-              return Icon(Icons.image_outlined, color: Colors.grey.shade500);
+              return Icon(Icons.image_outlined, color: colors.iconSecondary);
             },
           ),
         ),
@@ -401,9 +431,9 @@ class _BatchImportDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusText = _statusText(item.status);
     final drafts = item.drafts;
     final isMultiDraft = drafts.length > 1;
+    final colors = PHColorScheme.of(context);
 
     return Semantics(
       container: true,
@@ -416,22 +446,6 @@ class _BatchImportDetails extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            isMultiDraft
-                ? '识别出 ${drafts.length} 个取件凭证'
-                : _titleText(drafts.firstOrNull),
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            statusText,
-            key: Key('batchImportStatus_$index'),
-            style: TextStyle(
-              color: item.status == BatchImportStatus.failed
-                  ? Theme.of(context).colorScheme.error
-                  : Colors.grey.shade700,
-            ),
-          ),
           if (item.status == BatchImportStatus.success &&
               drafts.length == 1) ...[
             const SizedBox(height: 8),
@@ -440,7 +454,9 @@ class _BatchImportDetails extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 drafts.single.trackingNumber!,
-                style: const TextStyle(fontSize: 13),
+                style: PHTypography.footnote.copyWith(
+                  color: colors.textSecondary,
+                ),
               ),
             ],
           ],
@@ -454,33 +470,25 @@ class _BatchImportDetails extends StatelessWidget {
             ) ...[
               if (draftIndex > 0) ...[
                 const SizedBox(height: 8),
-                const Divider(height: 1),
+                Divider(height: 1, color: colors.separatorDefault),
                 const SizedBox(height: 8),
               ],
               _CredentialSummary(draft: drafts[draftIndex]),
             ],
-          ],
-          if (item.status == BatchImportStatus.failed &&
-              item.errorMessage != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              item.errorMessage!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
           ],
         ],
       ),
     );
   }
 
-  String _titleText(PickupCredentialDraft? draft) {
+  static String titleText(BatchImportItem item, int index) {
+    final draft = item.drafts.firstOrNull;
     if (item.status == BatchImportStatus.failed) {
       return '识别失败';
+    }
+
+    if (item.drafts.length > 1) {
+      return '识别出 ${item.drafts.length} 个取件凭证';
     }
 
     if (draft == null) {
@@ -494,7 +502,19 @@ class _BatchImportDetails extends StatelessWidget {
     return draft.courierCompany.displayName;
   }
 
-  static String _statusText(BatchImportStatus status) {
+  static String _titleText(PickupCredentialDraft? draft) {
+    if (draft == null) {
+      return '未识别';
+    }
+
+    if (draft.courierCompany == CourierCompany.unknown) {
+      return '未识别快递公司';
+    }
+
+    return draft.courierCompany.displayName;
+  }
+
+  static String statusText(BatchImportStatus status) {
     return switch (status) {
       BatchImportStatus.pending => '等待识别',
       BatchImportStatus.recognizing => '正在识别',
@@ -511,6 +531,7 @@ class _CredentialSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = PHColorScheme.of(context);
     final company = draft.courierCompany == CourierCompany.unknown
         ? '未识别快递公司'
         : draft.courierCompany.displayName;
@@ -520,13 +541,19 @@ class _CredentialSummary extends StatelessWidget {
       children: [
         Text(
           company,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          style: PHTypography.bodyEmphasis.copyWith(color: colors.textPrimary),
         ),
         const SizedBox(height: 4),
-        Text(draft.pickupCode ?? '无取件码'),
+        Text(
+          draft.pickupCode ?? '无取件码',
+          style: PHTypography.subheadline.copyWith(color: colors.textPrimary),
+        ),
         if (draft.trackingNumber != null) ...[
           const SizedBox(height: 2),
-          Text(draft.trackingNumber!, style: const TextStyle(fontSize: 13)),
+          Text(
+            draft.trackingNumber!,
+            style: PHTypography.footnote.copyWith(color: colors.textSecondary),
+          ),
         ],
       ],
     );
