@@ -78,3 +78,8 @@ app.*.map.json
 /macos/Flutter/ephemeral/
 /windows/flutter/ephemeral/
 /linux/flutter/ephemeral/
+
+# Codex local artifacts
+.codex/
+.codex-output/
+.codex-validation/
