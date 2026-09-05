@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:packagehub/design_system/components/ph_package_card.dart';
+import 'package:packagehub/design_system/tokens/ph_color_scheme.dart';
 import 'package:packagehub/design_system/tokens/ph_motion.dart';
+import 'package:packagehub/design_system/tokens/ph_radius.dart';
 import 'package:packagehub/models/pickup_credential.dart';
 import 'package:packagehub/models/pickup_credential_draft.dart';
 
@@ -33,21 +35,25 @@ class PickupCredentialCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final card = _CredentialCardContent(
-      credential: credential,
-      isSelectionMode: isSelectionMode,
-      isSelected: isSelected,
-      isUpdating: isUpdating,
-      onTap: onTap,
-      onSelectionChanged: onSelectionChanged,
-      onMarkPickedUp: onMarkPickedUp,
-      onMarkPending: onMarkPending,
-      showCourierCompany: showCourierCompany,
-    );
-    final displayedCard = isSelectionMode
-        ? card
+    Widget buildCard({bool trailingEdgeConnected = false}) {
+      return _CredentialCardContent(
+        credential: credential,
+        isSelectionMode: isSelectionMode,
+        isSelected: isSelected,
+        isUpdating: isUpdating,
+        onTap: onTap,
+        onSelectionChanged: onSelectionChanged,
+        onMarkPickedUp: onMarkPickedUp,
+        onMarkPending: onMarkPending,
+        showCourierCompany: showCourierCompany,
+        trailingEdgeConnected: trailingEdgeConnected,
+      );
+    }
+
+    final card = isSelectionMode
+        ? buildCard()
         : ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(PHRadius.lg),
             child: Slidable(
               key: Key('credentialSlidable-${credential.id ?? 'new'}'),
               endActionPane: ActionPane(
@@ -55,18 +61,40 @@ class PickupCredentialCard extends StatelessWidget {
                 extentRatio: 0.28,
                 children: [
                   SlidableAction(
-                    key: Key('credentialDeleteAction-${credential.id ?? 'new'}'),
+                    key: Key(
+                      'credentialDeleteAction-${credential.id ?? 'new'}',
+                    ),
                     onPressed: (_) => onDelete(),
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                    foregroundColor: Theme.of(context).colorScheme.onError,
+                    backgroundColor: PHColorScheme.of(context).bgDanger,
+                    foregroundColor: PHColorScheme.of(context).textInverse,
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(PHRadius.lg),
+                      bottomRight: Radius.circular(PHRadius.lg),
+                    ),
                     icon: Icons.delete_outline,
                     label: '删除',
                   ),
                 ],
               ),
-              child: card,
+              child: Builder(
+                builder: (context) {
+                  final controller = Slidable.of(context)!;
+                  return AnimatedBuilder(
+                    animation: Listenable.merge([
+                      controller.animation,
+                      controller.direction,
+                    ]),
+                    builder: (context, _) {
+                      return buildCard(
+                        trailingEdgeConnected: controller.ratio < 0,
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           );
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -86,7 +114,7 @@ class PickupCredentialCard extends StatelessWidget {
             ),
           ),
         ),
-        Expanded(child: displayedCard),
+        Expanded(child: card),
       ],
     );
   }
@@ -102,6 +130,7 @@ class _CredentialCardContent extends StatelessWidget {
   final VoidCallback? onMarkPickedUp;
   final VoidCallback? onMarkPending;
   final bool showCourierCompany;
+  final bool trailingEdgeConnected;
 
   const _CredentialCardContent({
     required this.credential,
@@ -113,6 +142,7 @@ class _CredentialCardContent extends StatelessWidget {
     required this.onMarkPickedUp,
     required this.onMarkPending,
     required this.showCourierCompany,
+    required this.trailingEdgeConnected,
   });
 
   @override
@@ -131,6 +161,7 @@ class _CredentialCardContent extends StatelessWidget {
       onComplete: !isSelectionMode && !isUpdating ? onMarkPickedUp : null,
       completeActionKey: Key('credentialLifecycleButton-${credential.id}'),
       cardKey: Key('credentialCard-${credential.id}'),
+      trailingEdgeConnected: trailingEdgeConnected,
       onTap: onTap,
       trailingAction: completed && !isSelectionMode && onMarkPending != null
           ? Semantics(

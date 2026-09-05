@@ -20,6 +20,10 @@ class PHPackageCard extends StatelessWidget {
   final Key? completeActionKey;
   final Key? cardKey;
 
+  /// Connects the trailing edge to a swipe action without changing the
+  /// default standalone card shape.
+  final bool trailingEdgeConnected;
+
   const PHPackageCard({
     super.key,
     required this.state,
@@ -32,6 +36,7 @@ class PHPackageCard extends StatelessWidget {
     this.statusLabel,
     this.completeActionKey,
     this.cardKey,
+    this.trailingEdgeConnected = false,
   });
 
   @override
@@ -135,13 +140,23 @@ class PHPackageCard extends StatelessWidget {
             ? colors.bgSurfaceSecondary
             : colors.bgSurface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PHRadius.lg),
+          borderRadius: trailingEdgeConnected
+              ? const BorderRadius.only(
+                  topLeft: Radius.circular(PHRadius.lg),
+                  bottomLeft: Radius.circular(PHRadius.lg),
+                )
+              : BorderRadius.circular(PHRadius.lg),
           side: BorderSide(color: colors.borderDefault, width: PHSizes.stroke),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(PHRadius.lg),
+          borderRadius: trailingEdgeConnected
+              ? const BorderRadius.only(
+                  topLeft: Radius.circular(PHRadius.lg),
+                  bottomLeft: Radius.circular(PHRadius.lg),
+                )
+              : BorderRadius.circular(PHRadius.lg),
           child: Container(
             key: cardKey,
             width: double.infinity,
