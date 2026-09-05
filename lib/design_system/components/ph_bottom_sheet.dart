@@ -42,19 +42,22 @@ class PHBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = PHColorScheme.of(context);
     return sizing == PHBottomSheetSizing.content
-        ? _buildContentSized(colors)
+        ? _buildContentSized(context, colors)
         : _buildScrollable(
+            context,
             colors,
             MediaQuery.sizeOf(context).height * maxHeightFactor,
           );
   }
 
-  Widget _buildContentSized(PHColorScheme colors) {
+  Widget _buildContentSized(BuildContext context, PHColorScheme colors) {
     return _surface(
+      context,
       colors,
       Padding(
         padding: padding,
         child: Column(
+          key: const Key('ph-bottom-sheet-content'),
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -68,14 +71,20 @@ class PHBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildScrollable(PHColorScheme colors, double maxHeight) {
+  Widget _buildScrollable(
+    BuildContext context,
+    PHColorScheme colors,
+    double maxHeight,
+  ) {
     return _surface(
+      context,
       colors,
       ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
         child: Padding(
           padding: padding,
           child: Column(
+            key: const Key('ph-bottom-sheet-content'),
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -90,14 +99,20 @@ class PHBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _surface(PHColorScheme colors, Widget child) {
+  Widget _surface(BuildContext context, PHColorScheme colors, Widget child) {
     return Material(
+      key: const Key('ph-bottom-sheet-surface'),
       color: colors.bgSurface,
       borderRadius: const BorderRadius.vertical(
         top: Radius.circular(PHRadius.xl),
       ),
       clipBehavior: Clip.antiAlias,
-      child: child,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewPaddingOf(context).bottom,
+        ),
+        child: child,
+      ),
     );
   }
 

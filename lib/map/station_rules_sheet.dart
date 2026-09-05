@@ -13,7 +13,7 @@ Future<void> showStationRulesSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    useSafeArea: true,
+    useSafeArea: false,
     showDragHandle: false,
     backgroundColor: Colors.transparent,
     builder: (_) => const _StationRulesSheet(),

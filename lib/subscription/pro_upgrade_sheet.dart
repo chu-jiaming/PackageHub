@@ -17,29 +17,26 @@ Future<bool> showProUpgradeSheet(
     isScrollControlled: true,
     showDragHandle: false,
     backgroundColor: Colors.transparent,
-    builder: (context) => SafeArea(
-      bottom: true,
-      child: PHBottomSheet(
-        sizing: PHBottomSheetSizing.content,
-        title: title,
-        actions: [
-          PHButton(
-            key: const Key('proUpsellPrimaryButton'),
-            onPressed: () => Navigator.pop(context, true),
-            label: '了解 PackageHub Pro',
-          ),
-          PHButton(
-            key: const Key('proUpsellSecondaryButton'),
-            variant: PHButtonVariant.tertiary,
-            onPressed: () => Navigator.pop(context, false),
-            label: secondaryLabel,
-          ),
-        ],
-        child: Text(
-          body,
-          style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: PHColorScheme.of(context).textPrimary),
+    builder: (context) => PHBottomSheet(
+      sizing: PHBottomSheetSizing.content,
+      title: title,
+      actions: [
+        PHButton(
+          key: const Key('proUpsellPrimaryButton'),
+          onPressed: () => Navigator.pop(context, true),
+          label: '了解 PackageHub Pro',
         ),
+        PHButton(
+          key: const Key('proUpsellSecondaryButton'),
+          variant: PHButtonVariant.tertiary,
+          onPressed: () => Navigator.pop(context, false),
+          label: secondaryLabel,
+        ),
+      ],
+      child: Text(
+        body,
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: PHColorScheme.of(context).textPrimary),
       ),
     ),
   );

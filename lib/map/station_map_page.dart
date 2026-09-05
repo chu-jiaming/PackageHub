@@ -562,47 +562,43 @@ class _ZoneSheetState extends State<_ZoneSheet> {
   @override
   Widget build(BuildContext context) {
     final maxHeight = MediaQuery.sizeOf(context).height * .7;
-    return SafeArea(
-      bottom: true,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: PHBottomSheet(
-          sizing: PHBottomSheetSizing.scrollable,
-          title: '${widget.zone.label} · ${widget.zone.subtitle}',
-          subtitle: '${items.length} 件',
-          child: ListView(
-            shrinkWrap: true,
-            padding: EdgeInsets.fromLTRB(0, PHSpacing.xs, 0, PHSpacing.lg),
-            children: [
-              if (items.isEmpty)
-                const PHEmptyState(title: '这里暂时没有待取件快递')
-              else
-                PHGroupedSection(
-                  children: [
-                    for (var index = 0; index < items.length; index++)
-                      PHListRow(
-                        title:
-                            items[index].pickupCode?.trim().isNotEmpty == true
-                            ? items[index].pickupCode!
-                            : '无取件码',
-                        subtitle:
-                            '${items[index].courierCompany.displayName}${items[index].trackingNumber == null ? '' : '\n${items[index].trackingNumber}'}',
-                        onTap: () => widget.onOpenDetail(items[index]),
-                        showChevron: false,
-                        showSeparator: index < items.length - 1,
-                        trailing: PHIconButton(
-                          tooltip: '标记为已取件',
-                          semanticsLabel: '标记为已取件',
-                          onPressed: busy.contains(items[index].id)
-                              ? null
-                              : () => pick(items[index]),
-                          icon: const Icon(CupertinoIcons.check_mark_circled),
-                        ),
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: PHBottomSheet(
+        sizing: PHBottomSheetSizing.scrollable,
+        title: '${widget.zone.label} · ${widget.zone.subtitle}',
+        subtitle: '${items.length} 件',
+        child: ListView(
+          shrinkWrap: true,
+          padding: EdgeInsets.fromLTRB(0, PHSpacing.xs, 0, PHSpacing.lg),
+          children: [
+            if (items.isEmpty)
+              const PHEmptyState(title: '这里暂时没有待取件快递')
+            else
+              PHGroupedSection(
+                children: [
+                  for (var index = 0; index < items.length; index++)
+                    PHListRow(
+                      title: items[index].pickupCode?.trim().isNotEmpty == true
+                          ? items[index].pickupCode!
+                          : '无取件码',
+                      subtitle:
+                          '${items[index].courierCompany.displayName}${items[index].trackingNumber == null ? '' : '\n${items[index].trackingNumber}'}',
+                      onTap: () => widget.onOpenDetail(items[index]),
+                      showChevron: false,
+                      showSeparator: index < items.length - 1,
+                      trailing: PHIconButton(
+                        tooltip: '标记为已取件',
+                        semanticsLabel: '标记为已取件',
+                        onPressed: busy.contains(items[index].id)
+                            ? null
+                            : () => pick(items[index]),
+                        icon: const Icon(CupertinoIcons.check_mark_circled),
                       ),
-                  ],
-                ),
-            ],
-          ),
+                    ),
+                ],
+              ),
+          ],
         ),
       ),
     );

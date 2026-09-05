@@ -11,9 +11,11 @@ void main() {
   ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
+    tester.view.viewPadding = const FakeViewPadding(bottom: 34);
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
+      tester.view.resetViewPadding();
     });
 
     await tester.pumpWidget(
@@ -42,14 +44,21 @@ void main() {
     expect(find.byKey(const Key('proUpsellPrimaryButton')), findsOneWidget);
     expect(find.byKey(const Key('proUpsellSecondaryButton')), findsOneWidget);
 
-    final sheet = tester.getRect(find.byType(PHBottomSheet));
+    final sheet = tester.getRect(
+      find.byKey(const Key('ph-bottom-sheet-surface')),
+    );
+    final content = tester.getRect(
+      find.byKey(const Key('ph-bottom-sheet-content')),
+    );
     final secondary = tester.getRect(
       find.byKey(const Key('proUpsellSecondaryButton')),
     );
     expect(sheet.height, lessThan(420));
     final bottomGap = sheet.bottom - secondary.bottom;
-    expect(bottomGap, closeTo(PHSpacing.lg, 0.01));
-    expect(bottomGap, lessThan(80));
+    expect(bottomGap, closeTo(PHSpacing.lg + 34, 0.01));
+    expect(bottomGap, lessThan(120));
+    expect(sheet.bottom, closeTo(844, 0.01));
+    expect(content.bottom, lessThan(844 - 34 + 0.01));
 
     await tester.tap(find.byKey(const Key('proUpsellSecondaryButton')));
     await tester.pumpAndSettle();

@@ -86,34 +86,50 @@ void main() {
     expect(material.color, PHColorScheme.dark.bgSurface);
   });
 
-  testWidgets('SafeArea contributes only the supplied bottom inset', (
-    tester,
-  ) async {
-    Future<double> pumpWithInset(double bottomInset) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MediaQuery(
-            data: MediaQueryData(padding: EdgeInsets.only(bottom: bottomInset)),
-            child: Scaffold(
-              body: SafeArea(
-                bottom: true,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: PHBottomSheet(child: const Text('内容')),
+  testWidgets(
+    'surface reaches the viewport while content avoids bottom inset',
+    (tester) async {
+      Future<(double surfaceGap, double contentGap)> pumpWithInset(
+        double bottomInset,
+      ) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(
+                viewPadding: EdgeInsets.only(bottom: bottomInset),
+              ),
+              child: Scaffold(
+                body: SafeArea(
+                  bottom: false,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: PHBottomSheet(child: const Text('内容')),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final viewport = tester.getSize(find.byType(MaterialApp));
-      return viewport.height -
-          tester.getRect(find.byType(PHBottomSheet)).bottom;
-    }
+        );
+        await tester.pumpAndSettle();
+        final viewport = tester.getSize(find.byType(MaterialApp));
+        return (
+          viewport.height -
+              tester
+                  .getRect(find.byKey(const Key('ph-bottom-sheet-surface')))
+                  .bottom,
+          viewport.height -
+              tester
+                  .getRect(find.byKey(const Key('ph-bottom-sheet-content')))
+                  .bottom,
+        );
+      }
 
-    final noInsetBottomGap = await pumpWithInset(0);
-    final insetBottomGap = await pumpWithInset(34);
-    expect(insetBottomGap - noInsetBottomGap, closeTo(34, 0.01));
-  });
+      final noInset = await pumpWithInset(0);
+      final inset = await pumpWithInset(34);
+      expect(noInset.$1, closeTo(0, 0.01));
+      expect(inset.$1, closeTo(0, 0.01));
+      expect(noInset.$2, closeTo(16, 0.01));
+      expect(inset.$2, closeTo(50, 0.01));
+    },
+  );
 }
